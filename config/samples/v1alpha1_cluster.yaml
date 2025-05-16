@@ -1,0 +1,18 @@
+apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+kind: Cluster
+metadata:
+  name: one
+spec: {}
+---
+apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+kind: Cluster
+metadata:
+  name: two
+spec: {}
+---
+apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+kind: Cluster
+metadata:
+  name: three
+  namespace: kube-system
+spec: {}
