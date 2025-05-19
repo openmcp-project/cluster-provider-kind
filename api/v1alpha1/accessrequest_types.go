@@ -33,12 +33,14 @@ type AccessRequestStatus struct {
 	Kubeconfig *Kubeconfig `json:"kubeconfig,omitempty"`
 }
 
+// Kubeconfig contains the information needed to access a cluster.
 type Kubeconfig struct {
 	SecretRef      corev1.SecretReference `json:"secretRef,omitempty"`
 	ExpiresAt      metav1.Time            `json:"expiresAt,omitempty"`
 	ServiceAccount ServiceAccountRef      `json:"serviceAccount,omitempty"`
 }
 
+// ServiceAccountRef contains the information needed to access a service account.
 type ServiceAccountRef struct {
 	Name      string `json:"name"`
 	Namespace string `json:"namespace"`

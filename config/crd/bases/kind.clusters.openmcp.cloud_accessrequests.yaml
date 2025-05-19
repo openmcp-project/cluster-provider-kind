@@ -111,6 +111,8 @@ spec:
             description: AccessRequestStatus defines the observed state of AccessRequest.
             properties:
               kubeconfig:
+                description: Kubeconfig contains the information needed to access
+                  a cluster.
                 properties:
                   expiresAt:
                     format: date-time
@@ -131,6 +133,8 @@ spec:
                     type: object
                     x-kubernetes-map-type: atomic
                   serviceAccount:
+                    description: ServiceAccountRef contains the information needed
+                      to access a service account.
                     properties:
                       name:
                         type: string

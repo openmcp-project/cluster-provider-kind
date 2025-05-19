@@ -4,7 +4,7 @@ vars:
   NESTED_MODULES: api
   API_DIRS: '{{.ROOT_DIR}}/api/v1alpha1/...'
   MANIFEST_OUT: '{{.ROOT_DIR}}/config/crd/bases'
-  CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/test/... {{.ROOT_DIR}}/api/v1alpha1/...'
+  CODE_DIRS: '{{.ROOT_DIR}}/cmd/... {{.ROOT_DIR}}/internal/... {{.ROOT_DIR}}/api/v1alpha1/...'
   COMPONENTS: 'cluster-provider-kind'
   REPO_NAME: 'https://github.com/openmcp-project/cluster-provider-kind'
   GENERATE_DOCS_INDEX: "false"
