@@ -37,6 +37,7 @@ import (
 )
 
 var (
+	// Finalizer is the finalizer for Cluster
 	Finalizer = v1alpha1.GroupVersion.Group + "/finalizer"
 )
 
@@ -68,7 +69,8 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Always try to update the status
-	defer r.Status().Update(ctx, cluster)
+	// FIXME: error handling at the end?
+	defer r.Status().Update(ctx, cluster) //nolint:errcheck
 
 	ctx = smartrequeue.NewContext(ctx, r.RequeueStore.For(cluster))
 
@@ -109,6 +111,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *v1alpha1.
 	return requeue.Progressing()
 }
 
+//nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
 	cluster.Status.Phase = v1alpha1.Progressing

@@ -33,8 +33,10 @@ const (
 	Unknown     Phase = "Unknown"
 )
 
+// ClusterConditionType is a custom type representing the condition type of a cluster.
 type ClusterConditionType string
 
+// Constants representing the conditions of a cluster.
 const (
 	ClusterReady ClusterConditionType = "Ready"
 	KindReady    ClusterConditionType = "KindReady"
