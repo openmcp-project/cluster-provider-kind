@@ -1,6 +1,36 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "git-submodules": {
+    "enabled": true
+  },
+  "minimumReleaseAge": "3 days",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    "config:best-practices",
+    "security:openssf-scorecard",
+    "helpers:pinGitHubActionDigests",
+    ":rebaseStalePrs"
+  ],
+  "postUpdateOptions": [
+    "gomodTidy"
+  ],
+  "packageRules": [
+    {
+      "matchPackageNames": [
+        "github.com/gardener/landscaper",
+        "github.com/gardener/landscaper-service",
+        "github.com/openmcp-project/*"
+      ],
+      "description": "Update all components from openmcp-project and landscaper immediately",
+      "rebaseWhen": "auto",
+      "minimumReleaseAge": "0 days",
+      "enabled": true
+    },
+    {
+      "description": "Ignore our own image in chart as it will be updated on release",
+      "matchPackageNames": ["ghcr.io/openmcp-project/github.com/openmcp-project/mcp-operator/images/mcp-operator"],
+      "matchManagers": ["helm-values"],
+      "enabled": false
+    }
   ]
 }
