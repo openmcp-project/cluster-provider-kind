@@ -1,5 +1,5 @@
 # Build the manager binary
-FROM docker.io/golang:1.23 AS builder
+FROM docker.io/golang:1.23@sha256:45c8837b16499b4e0e52b62d4cfba7bf04fc651b7d9265f95010fe0beaec2626 AS builder
 ARG TARGETOS
 ARG TARGETARCH
 
@@ -24,7 +24,7 @@ COPY pkg/ pkg/
 # by leaving it empty we can ensure that the container and binary shipped on it will have the same platform.
 RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build -a -o manager cmd/main.go
 
-FROM alpine:3.21.3
+FROM alpine:3.21.3@sha256:a8560b36e8b8210634f77d9f7f9efd7ffa463e380b75e2e74aff4511df3ef88c
 RUN apk add --no-cache docker-cli kind
 WORKDIR /
 COPY --from=builder /workspace/manager .
