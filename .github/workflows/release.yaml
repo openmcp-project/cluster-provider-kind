@@ -14,10 +14,18 @@ jobs:
     name: Release version
     runs-on: ubuntu-24.04
     steps:
+      - name: Create GitHub App token
+        uses: actions/create-github-app-token@v2
+        id: app-token
+        with:
+          # required
+          app-id: 1312871
+          private-key: ${{ secrets.OPENMCP_CI_APP_PRIVATE_KEY }}
+
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          ssh-key: ${{ secrets.PUSH_KEY }}
+          token: ${{ steps.app-token.outputs.token }}
           fetch-tags: true
           fetch-depth: 0
           submodules: recursive
