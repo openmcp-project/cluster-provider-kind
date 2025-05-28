@@ -30,7 +30,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/metallb"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
@@ -83,7 +84,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *v1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = v1alpha1.Terminating
+	cluster.Status.Phase = v1alpha1.CLUSTER_PHASE_DELETING
 
 	if !controllerutil.ContainsFinalizer(cluster, Finalizer) {
 		// Nothing to do
