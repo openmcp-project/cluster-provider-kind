@@ -12,10 +12,19 @@ import (
 	"sigs.k8s.io/kind/pkg/cluster"
 )
 
+// Provider defines the interface for managing Kubernetes clusters using kind.
+// It provides methods to create, delete, check existence of clusters, and retrieve kubeconfig.
 type Provider interface {
+	// CreateCluster creates a new Kubernetes cluster with the given name.
 	CreateCluster(name string) error
+
+	// DeleteCluster deletes the Kubernetes cluster with the given name.
 	DeleteCluster(name string) error
+
+	// ClusterExists checks if a Kubernetes cluster with the given name exists.
 	ClusterExists(name string) (bool, error)
+
+	// KubeConfig retrieves the kubeconfig for the specified cluster name.
 	KubeConfig(name string) (string, error)
 }
 
@@ -23,22 +32,24 @@ var (
 	kubeconfigPath = path.Join(os.TempDir(), "cluster-provider-kind.kubeconfig")
 )
 
-func NewDockerProvider() Provider {
-	return &provider{
+// KindProvider returns a new instance of the kind provider for managing Kubernetes clusters.
+// It uses the default Docker-based kind provider configuration.
+func NewKindProvider() Provider {
+	return &kindProvider{
 		internal: cluster.NewProvider(
 			cluster.ProviderWithDocker(),
 		),
 	}
 }
 
-var _ Provider = &provider{}
+var _ Provider = &kindProvider{}
 
-type provider struct {
+type kindProvider struct {
 	internal *cluster.Provider
 }
 
 // ClusterExists implements Provider.
-func (p *provider) ClusterExists(name string) (bool, error) {
+func (p *kindProvider) ClusterExists(name string) (bool, error) {
 	clusters, err := p.internal.List()
 	if err != nil {
 		return false, err
@@ -48,7 +59,7 @@ func (p *provider) ClusterExists(name string) (bool, error) {
 }
 
 // CreateCluster implements Provider.
-func (p *provider) CreateCluster(name string) error {
+func (p *kindProvider) CreateCluster(name string) error {
 	options := []cluster.CreateOption{
 		cluster.CreateWithWaitForReady(1 * time.Minute),
 		cluster.CreateWithKubeconfigPath(kubeconfigPath),
@@ -57,12 +68,13 @@ func (p *provider) CreateCluster(name string) error {
 }
 
 // DeleteCluster implements Provider.
-func (p *provider) DeleteCluster(name string) error {
+func (p *kindProvider) DeleteCluster(name string) error {
 	return p.internal.Delete(name, kubeconfigPath)
 }
 
-func (p *provider) KubeConfig(name string) (string, error) {
-	kubeconfigStr, err := p.internal.KubeConfig(name, true)
+// KubeConfig implements Provider.
+func (p *kindProvider) KubeConfig(name string) (string, error) {
+	kubeconfigStr, err := p.internal.KubeConfig(name, false) // TODO: false only in local mode
 	if err != nil {
 		return "", err
 	}
@@ -77,6 +89,6 @@ func (p *provider) KubeConfig(name string) (string, error) {
 	return strings.ReplaceAll(kubeconfigStr, "https://"+containerName, "https://"+containerIP.String()), nil
 }
 
-func (p *provider) controlPlaneContainer(name string) string {
+func (p *kindProvider) controlPlaneContainer(name string) string {
 	return fmt.Sprintf("%s-control-plane", name)
 }

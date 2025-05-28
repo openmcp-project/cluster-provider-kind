@@ -181,7 +181,7 @@ func main() {
 		})
 	}
 
-	kindProvider := kind.NewDockerProvider()
+	kindProvider := kind.NewKindProvider()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
