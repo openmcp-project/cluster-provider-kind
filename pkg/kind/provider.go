@@ -74,7 +74,7 @@ func (p *kindProvider) DeleteCluster(name string) error {
 
 // KubeConfig implements Provider.
 func (p *kindProvider) KubeConfig(name string) (string, error) {
-	kubeconfigStr, err := p.internal.KubeConfig(name, false) // TODO: false only in local mode
+	kubeconfigStr, err := p.internal.KubeConfig(name, runsInContainer())
 	if err != nil {
 		return "", err
 	}
@@ -87,6 +87,11 @@ func (p *kindProvider) KubeConfig(name string) (string, error) {
 	}
 
 	return strings.ReplaceAll(kubeconfigStr, "https://"+containerName, "https://"+containerIP.String()), nil
+}
+
+// runsInContainer returns true if the KIND_IN_CONTAINER environment variable is set to "true".
+func runsInContainer() bool {
+	return os.Getenv("KIND_IN_CONTAINER") == "true"
 }
 
 func (p *kindProvider) controlPlaneContainer(name string) string {
