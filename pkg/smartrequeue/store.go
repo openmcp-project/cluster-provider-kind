@@ -9,6 +9,8 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// NewStore creates a new Store with the specified minimum and maximum intervals
+// and a multiplier for the exponential backoff logic.
 func NewStore(minInterval, maxInterval time.Duration, multiplier float32) *Store {
 	return &Store{
 		minInterval: minInterval,
@@ -18,6 +20,8 @@ func NewStore(minInterval, maxInterval time.Duration, multiplier float32) *Store
 	}
 }
 
+// Store is used to manage requeue entries for different objects.
+// It holds a map of entries indexed by a key that uniquely identifies the object.
 type Store struct {
 	minInterval time.Duration
 	maxInterval time.Duration
@@ -53,6 +57,7 @@ func (s *Store) deleteEntry(toDelete *Entry) {
 	}
 }
 
+// cap limits the next duration to the maximum interval.
 func (s *Store) cap(next time.Duration) time.Duration {
 	if next > s.maxInterval {
 		return s.maxInterval
@@ -81,6 +86,8 @@ func newEntry(s *Store) *Entry {
 	}
 }
 
+// Entry is used to manage the requeue logic for a specific object.
+// It holds the next duration to requeue and the store it belongs to.
 type Entry struct {
 	store        *Store
 	nextDuration time.Duration
