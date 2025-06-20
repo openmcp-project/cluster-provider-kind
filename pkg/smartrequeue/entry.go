@@ -24,7 +24,6 @@ func newEntry(s *Store) *Entry {
 // so that the controller-runtime can handle the exponential backoff for errors.
 func (e *Entry) Error(err error) (ctrl.Result, error) {
 	e.nextDuration = e.store.minInterval
-	e.setNext()
 	return ctrl.Result{}, err
 }
 
