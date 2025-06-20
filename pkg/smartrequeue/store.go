@@ -57,14 +57,6 @@ func (s *Store) deleteEntry(toDelete *Entry) {
 	}
 }
 
-// cap limits the next duration to the maximum interval.
-func (s *Store) cap(next time.Duration) time.Duration {
-	if next > s.maxInterval {
-		return s.maxInterval
-	}
-	return next
-}
-
 func keyFromObject(obj client.Object) key {
 	return key{
 		Kind:      reflect.TypeOf(obj).Elem().Name(),
@@ -122,7 +114,15 @@ func (e *Entry) Never() (ctrl.Result, error) {
 	return ctrl.Result{}, nil
 }
 
+// setNext updates the next requeue duration using exponential backoff.
+// It multiplies the current duration by the store's multiplier and ensures
+// the result doesn't exceed the configured maximum interval.
 func (e *Entry) setNext() {
-	e.nextDuration = time.Duration(float32(e.nextDuration) * e.store.multiplier)
-	e.nextDuration = e.store.cap(e.nextDuration)
+	newDuration := time.Duration(float32(e.nextDuration) * e.store.multiplier)
+
+	if newDuration > e.store.maxInterval {
+		newDuration = e.store.maxInterval
+	}
+
+	e.nextDuration = newDuration
 }
