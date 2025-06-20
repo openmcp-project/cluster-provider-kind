@@ -1,11 +1,14 @@
 package smartrequeue
 
 import (
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
@@ -94,15 +97,89 @@ func TestFor(t *testing.T) {
 			entry1 := store.For(tt.firstObj)
 
 			assert.NotNil(t, entry1, "Expected entry to be created")
-			assert.Equal(t, 1*time.Second, getRequeueAfter(entry1.Stable()))
+			result, err := entry1.Stable()
+			require.NoError(t, err)
+			assert.Equal(t, 1*time.Second, getRequeueAfter(result, err))
 
 			entry2 := store.For(tt.secondObj)
 
 			if tt.expectSame {
-				assert.Equal(t, entry1, entry2, tt.description)
+				assert.Same(t, entry1, entry2, tt.description)
 			} else {
-				assert.NotEqual(t, entry1, entry2, tt.description)
+				assert.NotSame(t, entry1, entry2, tt.description)
 			}
 		})
 	}
+}
+
+// TestClear ensures the Clear method removes all entries
+func TestClear(t *testing.T) {
+	store := NewStore(time.Second, time.Minute, 2)
+
+	// Add some entries
+	obj1 := &v1alpha1.Cluster{
+		ObjectMeta: ctrl.ObjectMeta{
+			Name:      "test1",
+			Namespace: "test",
+		},
+	}
+
+	obj2 := &v1alpha1.Cluster{
+		ObjectMeta: ctrl.ObjectMeta{
+			Name:      "test2",
+			Namespace: "test",
+		},
+	}
+
+	// Get entries to populate the store
+	entry1 := store.For(obj1)
+	entry2 := store.For(obj2)
+
+	// Verify entries exist
+	assert.NotNil(t, entry1)
+	assert.NotNil(t, entry2)
+
+	// Clear the store
+	store.Clear()
+
+	// Get entries again - they should be new instances
+	entry1After := store.For(obj1)
+	entry2After := store.For(obj2)
+
+	// Verify they're different instances
+	assert.NotSame(t, entry1, entry1After)
+	assert.NotSame(t, entry2, entry2After)
+}
+
+// TestConcurrentAccess tests that the store handles concurrent access properly
+func TestConcurrentAccess(t *testing.T) {
+	store := NewStore(time.Second, time.Minute, 2)
+
+	// Create a series of objects
+	const numObjects = 100
+	objects := make([]client.Object, numObjects)
+
+	for i := 0; i < numObjects; i++ {
+		objects[i] = &v1alpha1.Cluster{
+			ObjectMeta: ctrl.ObjectMeta{
+				Name:      fmt.Sprintf("test-%d", i),
+				Namespace: "test",
+			},
+		}
+	}
+
+	// Access concurrently
+	var wg sync.WaitGroup
+	wg.Add(numObjects)
+
+	for i := 0; i < numObjects; i++ {
+		go func(idx int) {
+			defer wg.Done()
+			obj := objects[idx]
+			entry := store.For(obj)
+			_, _ = entry.Stable() // Just exercise the API
+		}(i)
+	}
+
+	wg.Wait()
 }

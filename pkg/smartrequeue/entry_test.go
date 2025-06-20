@@ -106,20 +106,14 @@ func TestEntry_Error(t *testing.T) {
 }
 
 func TestEntry_Never(t *testing.T) {
-	// Setup with store spy to verify deletion
+	// Setup
 	store := NewStore(time.Second, time.Minute, 2)
 	entry := newEntry(store)
 
-	// Call some methods first to ensure we have state
-	_, _ = entry.Stable()
-
-	// Test Never
-	t.Run("returns empty result and no error", func(t *testing.T) {
+	// Test Never behavior
+	t.Run("returns empty result", func(t *testing.T) {
 		result, err := entry.Never()
-		assert.NoError(t, err)
-		assert.Equal(t, 0*time.Second, getRequeueAfter(result, err))
+		require.NoError(t, err)
+		assert.Equal(t, time.Duration(0), getRequeueAfter(result, err))
 	})
-
-	// Therotically, we should verify that the entry is deleted from the store.
-	// Since we don't have direct access to store internals here, this is not possible.
 }

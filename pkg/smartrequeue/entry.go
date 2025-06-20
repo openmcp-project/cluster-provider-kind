@@ -30,8 +30,13 @@ func (e *Entry) Error(err error) (ctrl.Result, error) {
 // Stable returns a Result and increments the interval for the next iteration.
 // Used when the external resource is stable (healthy or unhealthy).
 func (e *Entry) Stable() (ctrl.Result, error) {
+	// Save current duration for result
+	current := e.nextDuration
+
+	// Schedule calculation of next duration
 	defer e.setNext()
-	return ctrl.Result{RequeueAfter: e.nextDuration}, nil
+
+	return ctrl.Result{RequeueAfter: current}, nil
 }
 
 // Progressing resets the duration to the minInterval and returns a Result with that interval.
