@@ -15,7 +15,7 @@ func Example_controllerUsage() {
 	store := smartrequeue.NewStore(5*time.Second, 10*time.Minute, 2.0)
 
 	// In your controller's Reconcile function:
-	reconcileFunction := func(req ctrl.Request) (ctrl.Result, error) {
+	reconcileFunction := func(_ ctrl.Request) (ctrl.Result, error) {
 		// Create a dummy object representing what you'd get from the client
 		var obj client.Object // In real code: Get this from the client
 
