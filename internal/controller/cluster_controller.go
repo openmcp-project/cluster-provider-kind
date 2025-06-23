@@ -115,7 +115,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *v1alpha1.
 //nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = v1alpha1.Progressing
+	cluster.Status.Phase = v1alpha1.PHASE_PROGRESSING
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
@@ -179,7 +179,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v
 		return requeue.Progressing()
 	}
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:   string(v1alpha1.MetalLBReady),
+		Type:   "MetalLBReady",
 		Status: metav1.ConditionTrue,
 		Reason: "AllPodsReady",
 	})
@@ -188,9 +188,9 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v
 		return requeue.Error(err)
 	}
 
-	cluster.Status.Phase = v1alpha1.Ready
+	cluster.Status.Phase = v1alpha1.CLUSTER_PHASE_READY
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:   string(v1alpha1.Ready),
+		Type:   string(v1alpha1.CLUSTER_PHASE_READY),
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterAndMetalLBReady",
 	})
