@@ -42,6 +42,7 @@ import (
 	"github.com/openmcp-project/cluster-provider-kind/internal/controller"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
+	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
@@ -54,6 +55,8 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(kindclustersopenmcpcloudv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(openv1alpha1.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 
