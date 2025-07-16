@@ -49,7 +49,12 @@ spec:
           status:
             description: ClusterStatus defines the observed state of Cluster.
             properties:
+              apiServer:
+                description: APIServer is the API server endpoint of the cluster.
+                type: string
               conditions:
+                description: Conditions is a list of conditions that apply to the
+                  cluster.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -105,11 +110,31 @@ spec:
                   - type
                   type: object
                 type: array
+              message:
+                description: Message contains further details in a human-readable
+                  format.
+                type: string
+              observedGeneration:
+                description: ObservedGeneration is the generation of this resource
+                  that was last reconciled by the controller.
+                format: int64
+                type: integer
               phase:
                 default: Unknown
                 description: Phase is a custom type representing the phase of a cluster.
                 type: string
+              providerStatus:
+                description: |-
+                  ProviderStatus is the provider-specific status of the cluster.
+                  x-kubernetes-preserve-unknown-fields: true
+                type: object
+                x-kubernetes-preserve-unknown-fields: true
+              reason:
+                description: Reason is expected to contain a CamelCased string that
+                  provides further information in a machine-readable format.
+                type: string
             required:
+            - observedGeneration
             - phase
             type: object
         type: object

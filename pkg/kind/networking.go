@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 

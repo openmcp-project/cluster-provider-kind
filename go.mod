@@ -5,12 +5,12 @@ go 1.24.2
 godebug default=go1.23
 
 require (
-	github.com/openmcp-project/openmcp-operator/api v0.6.0
+	github.com/openmcp-project/openmcp-operator/api v0.8.3
 	github.com/stretchr/testify v1.10.0
 	k8s.io/api v0.33.1
 	k8s.io/apimachinery v0.33.1
 	k8s.io/client-go v0.33.1
-	sigs.k8s.io/controller-runtime v0.20.4
+	sigs.k8s.io/controller-runtime v0.21.0
 	sigs.k8s.io/kind v0.29.0
 	sigs.k8s.io/kustomize/api v0.19.0
 	sigs.k8s.io/kustomize/kyaml v0.19.0
@@ -32,7 +32,7 @@ require (
 	github.com/fsnotify/fsnotify v1.8.0 // indirect
 	github.com/fxamacker/cbor/v2 v2.7.0 // indirect
 	github.com/go-errors/errors v1.5.1 // indirect
-	github.com/go-logr/logr v1.4.2 // indirect
+	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-logr/zapr v1.3.0 // indirect
 	github.com/go-openapi/jsonpointer v0.21.1 // indirect

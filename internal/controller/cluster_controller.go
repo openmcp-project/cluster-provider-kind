@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/metallb"
@@ -84,7 +84,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *v1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = v1alpha1.CLUSTER_PHASE_DELETING
+	cluster.Status.Phase = v1alpha1.StatusPhaseTerminating
 
 	if !controllerutil.ContainsFinalizer(cluster, Finalizer) {
 		// Nothing to do
@@ -115,7 +115,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *v1alpha1.
 //nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = v1alpha1.PHASE_PROGRESSING
+	cluster.Status.Phase = v1alpha1.StatusPhaseProgressing
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
@@ -142,7 +142,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v
 		return requeue.Progressing()
 	}
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:   string(v1alpha1.KindReady),
+		Type:   string("KindReady"),
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterExists",
 	})
@@ -188,9 +188,9 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *v
 		return requeue.Error(err)
 	}
 
-	cluster.Status.Phase = v1alpha1.CLUSTER_PHASE_READY
+	cluster.Status.Phase = v1alpha1.StatusPhaseReady
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:   string(v1alpha1.CLUSTER_PHASE_READY),
+		Type:   string(v1alpha1.StatusPhaseReady),
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterAndMetalLBReady",
 	})
