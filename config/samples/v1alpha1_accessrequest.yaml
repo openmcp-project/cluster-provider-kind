@@ -1,4 +1,4 @@
-apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+apiVersion: clusters.openmcp.cloud/v1alpha1
 kind: AccessRequest
 metadata:
   name: accessrequest-sample
