@@ -3,7 +3,7 @@
   "git-submodules": {
     "enabled": true
   },
-  "minimumReleaseAge": "3 days",
+  "minimumReleaseAge": "0 days",
   "extends": [
     "config:recommended",
     "config:best-practices",
@@ -13,5 +13,19 @@
   ],
   "postUpdateOptions": [
     "gomodTidy"
+  ],
+  "packageRules": [
+    {
+      "matchManagers": [
+        "gomod"
+      ],
+      "matchDepNames": [
+        "go"
+      ],
+      "matchDepTypes": [
+        "golang"
+      ],
+      "rangeStrategy": "bump"
+    }
   ]
 }
