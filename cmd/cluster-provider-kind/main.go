@@ -38,11 +38,12 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+
 	kindclustersopenmcpcloudv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/internal/controller"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
-	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	// +kubebuilder:scaffold:imports
 )
 
