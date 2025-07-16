@@ -91,6 +91,9 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		secret.Data["kubeconfig"] = []byte(kubeconfigStr)
 		return controllerutil.SetOwnerReference(ar, secret, r.Scheme)
+
+		// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
+		// ignore clusterrequest ref
 	})
 	return ctrl.Result{}, err
 }
