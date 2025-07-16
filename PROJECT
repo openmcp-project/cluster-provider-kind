@@ -16,12 +16,4 @@ resources:
   kind: Cluster
   path: github.com/openmcp-project/cluster-provider-kind/api/v1alpha1
   version: v1alpha1
-- api:
-    crdVersion: v1
-    namespaced: true
-  controller: true
-  domain: kind.clusters.openmcp.cloud
-  kind: AccessRequest
-  path: github.com/openmcp-project/cluster-provider-kind/api/v1alpha1
-  version: v1alpha1
 version: "3"
