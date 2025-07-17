@@ -27,3 +27,6 @@ go.work
 *~
 
 *.html
+
+# VS Code Go debug binaries
+bin/debug_bin*

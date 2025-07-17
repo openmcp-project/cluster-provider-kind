@@ -29,5 +29,7 @@ RUN apk add --no-cache docker-cli kind
 WORKDIR /
 COPY --from=builder /workspace/manager .
 USER 65532:65532
+# Set the default command to execute when running the container
+ENV KIND_IN_CONTAINER=true
 
 ENTRYPOINT ["/manager"]

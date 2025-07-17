@@ -30,7 +30,10 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
+	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+
 	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
@@ -54,7 +57,7 @@ type AccessRequestReconciler struct {
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	ar := &v1alpha1.AccessRequest{}
+	ar := &openv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -88,6 +91,9 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		secret.Data["kubeconfig"] = []byte(kubeconfigStr)
 		return controllerutil.SetOwnerReference(ar, secret, r.Scheme)
+
+		// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
+		// ignore clusterrequest ref
 	})
 	return ctrl.Result{}, err
 }
@@ -95,7 +101,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.AccessRequest{}).
+		For(&openv1alpha1.AccessRequest{}).
 		Named("accessrequest").
 		Complete(r)
 }

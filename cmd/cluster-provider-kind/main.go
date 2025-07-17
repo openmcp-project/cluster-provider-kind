@@ -38,6 +38,8 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
+	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+
 	kindclustersopenmcpcloudv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/internal/controller"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
@@ -54,6 +56,8 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(kindclustersopenmcpcloudv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(openv1alpha1.AddToScheme(scheme))
+
 	// +kubebuilder:scaffold:scheme
 }
 
@@ -181,7 +185,7 @@ func main() {
 		})
 	}
 
-	kindProvider := kind.NewDockerProvider()
+	kindProvider := kind.NewKindProvider()
 
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,

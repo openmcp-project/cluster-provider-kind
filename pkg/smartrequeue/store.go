@@ -5,117 +5,114 @@ import (
 	"sync"
 	"time"
 
-	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
-func NewStore(minInterval, maxInterval time.Duration, multiplier float32) *Store {
-	return &Store{
-		minInterval: minInterval,
-		maxInterval: maxInterval,
-		multiplier:  multiplier,
-		objects:     map[key]*Entry{},
-	}
-}
-
+// Store is used to manage requeue entries for different objects.
+// It holds a map of entries indexed by a key that uniquely identifies the object.
 type Store struct {
 	minInterval time.Duration
 	maxInterval time.Duration
 	multiplier  float32
 	objects     map[key]*Entry
-	objectsLock sync.Mutex
+	mu          sync.RWMutex // Using RWMutex for better read concurrency
 }
 
+// NewStore creates a new Store with the specified minimum and maximum intervals
+// and a multiplier for the exponential backoff logic.
+func NewStore(minInterval, maxInterval time.Duration, multiplier float32) *Store {
+	if minInterval <= 0 {
+		minInterval = 1 * time.Second // Safe default
+	}
+
+	if maxInterval < minInterval {
+		maxInterval = minInterval * 60 // Safe default: 1 minute or 60x min
+	}
+
+	if multiplier <= 1.0 {
+		multiplier = 2.0 // Safe default: double each time
+	}
+
+	return &Store{
+		minInterval: minInterval,
+		maxInterval: maxInterval,
+		multiplier:  multiplier,
+		objects:     make(map[key]*Entry),
+	}
+}
+
+// For gets or creates an Entry for the specified object.
 func (s *Store) For(obj client.Object) *Entry {
-	s.objectsLock.Lock()
-	defer s.objectsLock.Unlock()
+	key := keyFromObject(obj)
 
-	objKey := keyFromObject(obj)
-	entry, ok := s.objects[objKey]
+	// Try read lock first for better concurrency
+	s.mu.RLock()
+	entry, exists := s.objects[key]
+	s.mu.RUnlock()
 
-	if !ok {
-		entry = newEntry(s)
-		s.objects[objKey] = entry
+	if exists {
+		return entry
+	}
+
+	// Need to create a new entry
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	// Check again in case another goroutine created it while we were waiting
+	entry, exists = s.objects[key]
+	if !exists {
+		entry = &Entry{
+			store:        s,
+			nextDuration: s.minInterval,
+		}
+		s.objects[key] = entry
 	}
 
 	return entry
 }
 
-func (s *Store) deleteEntry(toDelete *Entry) {
-	s.objectsLock.Lock()
-	defer s.objectsLock.Unlock()
+// Clear removes all entries from the store (mainly useful for testing).
+func (s *Store) Clear() {
+	s.mu.Lock()
+	defer s.mu.Unlock()
 
-	for i, entry := range s.objects {
+	s.objects = make(map[key]*Entry)
+}
+
+// deleteEntry removes an entry from the store.
+func (s *Store) deleteEntry(toDelete *Entry) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	for k, entry := range s.objects {
 		if entry == toDelete {
-			delete(s.objects, i)
+			delete(s.objects, k)
 			break
 		}
 	}
 }
 
-func (s *Store) cap(next time.Duration) time.Duration {
-	if next > s.maxInterval {
-		return s.maxInterval
-	}
-	return next
-}
-
+// keyFromObject generates a unique key for a client.Object.
 func keyFromObject(obj client.Object) key {
+	kind := ""
+	if obj != nil {
+		kind = obj.GetObjectKind().GroupVersionKind().Kind
+		if kind == "" {
+			// Fallback if Kind is not set in GroupVersionKind
+			kind = reflect.TypeOf(obj).Elem().Name()
+		}
+	}
+
 	return key{
-		Kind:      reflect.TypeOf(obj).Elem().Name(),
+		Kind:      kind,
 		Name:      obj.GetName(),
 		Namespace: obj.GetNamespace(),
 	}
 }
 
+// key uniquely identifies a Kubernetes object.
 type key struct {
 	Kind      string
 	Name      string
 	Namespace string
-}
-
-func newEntry(s *Store) *Entry {
-	return &Entry{
-		store:        s,
-		nextDuration: s.minInterval,
-	}
-}
-
-type Entry struct {
-	store        *Store
-	nextDuration time.Duration
-}
-
-// Error resets the duration to the minInterval and returns an empty Result and the error
-// so that the controller-runtime can handle the exponential backoff for errors.
-func (e *Entry) Error(err error) (ctrl.Result, error) {
-	e.nextDuration = e.store.minInterval
-	e.setNext()
-	return ctrl.Result{}, err
-}
-
-// Stable returns a Result and increments the interval for the next iteration.
-// Used when the external resource is stable (healthy or unhealthy).
-func (e *Entry) Stable() (ctrl.Result, error) {
-	defer e.setNext()
-	return ctrl.Result{RequeueAfter: e.nextDuration}, nil
-}
-
-// Progressing resets the duration to the minInterval and returns a Result with that interval.
-// Used when the external resource is still doing something (creating, deleting, updating, etc.)
-func (e *Entry) Progressing() (ctrl.Result, error) {
-	e.nextDuration = e.store.minInterval
-	defer e.setNext()
-	return ctrl.Result{RequeueAfter: e.nextDuration}, nil
-}
-
-// Never deletes the entry from the store and returns an empty Result.
-func (e *Entry) Never() (ctrl.Result, error) {
-	e.store.deleteEntry(e)
-	return ctrl.Result{}, nil
-}
-
-func (e *Entry) setNext() {
-	e.nextDuration = time.Duration(float32(e.nextDuration) * e.store.multiplier)
-	e.nextDuration = e.store.cap(e.nextDuration)
 }
