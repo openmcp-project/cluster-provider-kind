@@ -32,7 +32,7 @@ import (
 
 	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
-	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+	clustersv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/clusters/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
@@ -65,8 +65,10 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
-	cluster := &v1alpha1.Cluster{}
+	defer r.Status().Update(ctx, ar) //nolint:errcheck
+
+	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Spec.ClusterRef.Namespace}
+	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
 	}
@@ -91,11 +93,16 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		secret.Data["kubeconfig"] = []byte(kubeconfigStr)
 		return controllerutil.SetOwnerReference(ar, secret, r.Scheme)
-
-		// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
-		// ignore clusterrequest ref
 	})
-	return ctrl.Result{}, err
+
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
+	// ignore clusterrequest ref
+
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.

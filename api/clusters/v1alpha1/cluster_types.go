@@ -21,29 +21,6 @@ import (
 	runtime "k8s.io/apimachinery/pkg/runtime"
 )
 
-// Phase is a custom type representing the phase of a cluster.
-type Phase string
-
-// Constants representing the phases of an instance lifecycle.
-const (
-	Pending     Phase = "Pending"
-	Progressing Phase = "Progressing"
-	Ready       Phase = "Ready"
-	Failed      Phase = "Failed"
-	Terminating Phase = "Terminating"
-	Unknown     Phase = "Unknown"
-)
-
-// ClusterConditionType is a custom type representing the condition type of a cluster.
-type ClusterConditionType string
-
-// Constants representing the conditions of a cluster.
-const (
-	ClusterReady ClusterConditionType = "Ready"
-	KindReady    ClusterConditionType = "KindReady"
-	MetalLBReady ClusterConditionType = "MetalLBReady"
-)
-
 // ClusterSpec defines the desired state of Cluster.
 type ClusterSpec struct{}
 
@@ -65,7 +42,7 @@ type ClusterStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration"`
 
 	// +kubebuilder:default=Unknown
-	Phase Phase `json:"phase"`
+	Phase string `json:"phase"`
 
 	// APIServer is the API server endpoint of the cluster.
 	// +optional

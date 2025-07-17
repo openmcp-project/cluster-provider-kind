@@ -2,7 +2,9 @@ apiVersion: clusters.openmcp.cloud/v1alpha1
 kind: AccessRequest
 metadata:
   name: accessrequest-sample
+  namespace: default
 spec:
   clusterRef:
     name: one
-  rules: []
+    namespace: default
+  permissions: []

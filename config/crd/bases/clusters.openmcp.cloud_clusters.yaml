@@ -4,9 +4,9 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.18.0
-  name: clusters.kind.clusters.openmcp.cloud
+  name: clusters.clusters.openmcp.cloud
 spec:
-  group: kind.clusters.openmcp.cloud
+  group: clusters.openmcp.cloud
   names:
     kind: Cluster
     listKind: ClusterList
@@ -121,7 +121,6 @@ spec:
                 type: integer
               phase:
                 default: Unknown
-                description: Phase is a custom type representing the phase of a cluster.
                 type: string
               providerStatus:
                 description: |-

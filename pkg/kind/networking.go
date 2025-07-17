@@ -10,7 +10,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+	clustersv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/clusters/v1alpha1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -26,7 +26,7 @@ var (
 	errNoSubnetsAvailable  = errors.New("no subnets available")
 	errInvalidIP           = errors.New("invalid textual representation of an IP address")
 
-	AnnotationAssignedSubnet = v1alpha1.GroupVersion.Group + "/assigned-subnet"
+	AnnotationAssignedSubnet = clustersv1alpha1.GroupVersion.Group + "/assigned-subnet"
 	lockListClusters         = sync.Mutex{}
 )
 
@@ -88,7 +88,7 @@ func NextAvailableLBNetwork(ctx context.Context, c client.Client) (net.IPNet, er
 		return net.IPNet{}, err
 	}
 
-	clusters := &v1alpha1.ClusterList{}
+	clusters := &clustersv1alpha1.ClusterList{}
 	if err := c.List(ctx, clusters); err != nil {
 		return net.IPNet{}, err
 	}
@@ -131,7 +131,7 @@ func calculateV4Subnet(input net.IPNet, offset int) (net.IPNet, error) {
 	}, nil
 }
 
-func isIpNetTaken(ipnet net.IPNet, clusters *v1alpha1.ClusterList) (bool, error) {
+func isIpNetTaken(ipnet net.IPNet, clusters *clustersv1alpha1.ClusterList) (bool, error) {
 	for _, c := range clusters.Items {
 		cNet, err := SubnetFromCluster(&c)
 		if err != nil {
@@ -147,7 +147,7 @@ func isIpNetTaken(ipnet net.IPNet, clusters *v1alpha1.ClusterList) (bool, error)
 	return false, nil
 }
 
-func SubnetFromCluster(c *v1alpha1.Cluster) (*net.IPNet, error) {
+func SubnetFromCluster(c *clustersv1alpha1.Cluster) (*net.IPNet, error) {
 	ipNetStr, ok := c.Annotations[AnnotationAssignedSubnet]
 	if !ok {
 		return nil, nil
