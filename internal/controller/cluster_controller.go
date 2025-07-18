@@ -30,7 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	"github.com/openmcp-project/cluster-provider-kind/api/clusters/v1alpha1"
 	clustersv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/clusters/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
@@ -116,7 +115,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv
 //nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = v1alpha1.StatusPhaseProgressing
+	cluster.Status.Phase = clustersv1alpha1.StatusPhaseProgressing
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
@@ -189,9 +188,9 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		return requeue.Error(err)
 	}
 
-	cluster.Status.Phase = v1alpha1.StatusPhaseReady
+	cluster.Status.Phase = clustersv1alpha1.StatusPhaseReady
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
-		Type:   string(v1alpha1.StatusPhaseReady),
+		Type:   string(clustersv1alpha1.StatusPhaseReady),
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterAndMetalLBReady",
 	})
@@ -201,12 +200,12 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&v1alpha1.Cluster{}).
+		For(&clustersv1alpha1.Cluster{}).
 		Named("cluster").
 		Complete(r)
 }
 
-func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *v1alpha1.Cluster) error {
+func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *clustersv1alpha1.Cluster) error {
 	_, ok := cluster.Annotations[kind.AnnotationAssignedSubnet]
 	if ok {
 		return nil
@@ -221,7 +220,7 @@ func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *v1alpha1.
 	return r.Update(ctx, cluster)
 }
 
-func kindName(cluster *v1alpha1.Cluster) string {
+func kindName(cluster *clustersv1alpha1.Cluster) string {
 	return fmt.Sprintf("%s.%s", namespaceOrDefault(cluster.Namespace), cluster.Name)
 }
 

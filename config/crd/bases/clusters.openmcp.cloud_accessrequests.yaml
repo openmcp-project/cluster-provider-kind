@@ -46,6 +46,7 @@ spec:
           metadata:
             type: object
           spec:
+            description: AccessRequestSpec defines the desired state of AccessRequest.
             properties:
               clusterRef:
                 description: |-
@@ -69,6 +70,8 @@ spec:
               permissions:
                 description: Permissions are the requested permissions.
                 items:
+                  description: PermissionsRequest defines the permissions requested
+                    in an AccessRequest.
                   properties:
                     namespace:
                       description: |-

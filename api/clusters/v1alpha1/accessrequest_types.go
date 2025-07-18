@@ -6,6 +6,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// RequestPhase defines the phase of an AccessRequest.
 type RequestPhase string
 
 const (
@@ -17,6 +18,8 @@ const (
 
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.clusterRef) || has(self.clusterRef)", message="clusterRef may not be removed once set"
 // +kubebuilder:validation:XValidation:rule="!has(oldSelf.requestRef) || has(self.requestRef)", message="requestRef may not be removed once set"
+
+// AccessRequestSpec defines the desired state of AccessRequest.
 type AccessRequestSpec struct {
 	// ClusterRef is the reference to the Cluster for which access is requested.
 	// If set, requestRef will be ignored.
@@ -36,6 +39,7 @@ type AccessRequestSpec struct {
 	Permissions []PermissionsRequest `json:"permissions"`
 }
 
+// PermissionsRequest defines the permissions requested in an AccessRequest.
 type PermissionsRequest struct {
 	// Namespace is the namespace for which the permissions are requested.
 	// If empty, this will result in a ClusterRole, otherwise in a Role in the respective namespace.
