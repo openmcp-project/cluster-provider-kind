@@ -57,7 +57,7 @@ type AccessRequestReconciler struct {
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	ar := &openv1alpha1.AccessRequest{}
+	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -66,6 +66,9 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	defer r.Status().Update(ctx, ar) //nolint:errcheck
+
+	// TODO: handle deletion
+	// remove owner reference to the secret if necessary?!
 
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Spec.ClusterRef.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
@@ -99,8 +102,16 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
-	// ignore clusterrequest ref
+	// Update the AccessRequest status with the secret reference
+	ar.Status.SecretRef = &clustersv1alpha1.SecretReference{
+		ObjectReference: clustersv1alpha1.ObjectReference{
+			Name:      secret.Name,
+			Namespace: secret.Namespace,
+		},
+		Key: "kubeconfig",
+	}
+
+	ar.Status.Phase = "Granted"
 
 	return ctrl.Result{}, nil
 }
