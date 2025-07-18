@@ -30,8 +30,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
-
 	clustersv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/clusters/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
@@ -62,6 +60,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
+		// TODO Phase Pending
 		return ctrl.Result{}, err
 	}
 
@@ -79,6 +78,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	name := kindName(cluster)
 	kubeconfigStr, err := r.Provider.KubeConfig(name)
 	if err != nil {
+		// Pending Phase
 		return ctrl.Result{}, err
 	}
 
@@ -99,6 +99,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	})
 
 	if err != nil {
+		// TODO Phase Pending
 		return ctrl.Result{}, err
 	}
 
@@ -119,7 +120,8 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&openv1alpha1.AccessRequest{}).
+		For(&clustersv1alpha1.AccessRequest{}).
 		Named("accessrequest").
+		// work with predicates to filter for labels https://github.com/openmcp-project/cluster-provider-gardener/blob/main/internal/controllers/accessrequest/controller.go#L309-L340
 		Complete(r)
 }
