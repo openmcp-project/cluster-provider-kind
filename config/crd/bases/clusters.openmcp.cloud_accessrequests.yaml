@@ -52,6 +52,16 @@ spec:
                   ClusterRef is the reference to the Cluster for which access is requested.
                   If set, requestRef will be ignored.
                   This value is immutable.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                - namespace
                 type: object
                 x-kubernetes-validations:
                 - message: clusterRef is immutable
@@ -126,6 +136,16 @@ spec:
                   RequestRef is the reference to the ClusterRequest for whose Cluster access is requested.
                   Is ignored if clusterRef is set.
                   This value is immutable.
+                properties:
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
+                required:
+                - name
+                - namespace
                 type: object
                 x-kubernetes-validations:
                 - message: requestRef is immutable
@@ -213,8 +233,16 @@ spec:
                   key:
                     description: Key is the key in the secret to use.
                     type: string
+                  name:
+                    description: Name is the name of the object.
+                    type: string
+                  namespace:
+                    description: Namespace is the namespace of the object.
+                    type: string
                 required:
                 - key
+                - name
+                - namespace
                 type: object
             required:
             - phase

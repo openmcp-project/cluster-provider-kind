@@ -4,7 +4,6 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	apimachinery "k8s.io/apimachinery/pkg/types"
 )
 
 type RequestPhase string
@@ -93,7 +92,12 @@ func init() {
 }
 
 // ObjectReference is a reference to an object in any namespace.
-type ObjectReference apimachinery.NamespacedName
+type ObjectReference struct {
+	// Name is the name of the object.
+	Name string `json:"name"`
+	// Namespace is the namespace of the object.
+	Namespace string `json:"namespace"`
+}
 
 // LocalObjectReference is a reference to an object in the same namespace as the resource referencing it.
 type LocalObjectReference corev1.LocalObjectReference
