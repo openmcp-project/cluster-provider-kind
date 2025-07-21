@@ -56,10 +56,10 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	//go:embed embedded/crds
-	crdFiles embed.FS
+	_ embed.FS
 
-	crdFlags      = crds.BindFlags(flag.CommandLine)
-	webhooksFlags = webhooks.BindFlags(flag.CommandLine)
+	_ = crds.BindFlags(flag.CommandLine)
+	_ = webhooks.BindFlags(flag.CommandLine)
 )
 
 func init() {
@@ -71,8 +71,8 @@ func init() {
 	// +kubebuilder:scaffold:scheme
 }
 
-func runInit(setupClient client.Client) {
-	//_ = context.Background()
+func runInit(_ client.Client) {
+	// _ = context.Background()
 
 	// if webhooksFlags.Install {
 	// 	// Generate webhook certificate
