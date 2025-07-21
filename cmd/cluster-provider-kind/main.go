@@ -18,6 +18,7 @@ package main
 
 import (
 	"crypto/tls"
+	"embed"
 	"flag"
 	"os"
 	"path/filepath"
@@ -25,6 +26,8 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+	"github.com/openmcp-project/controller-utils/pkg/init/crds"
+	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	"k8s.io/apimachinery/pkg/runtime"
@@ -32,6 +35,7 @@ import (
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/certwatcher"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
@@ -50,6 +54,12 @@ import (
 var (
 	scheme   = runtime.NewScheme()
 	setupLog = ctrl.Log.WithName("setup")
+
+	//go:embed embedded/crds
+	crdFiles embed.FS
+
+	crdFlags      = crds.BindFlags(flag.CommandLine)
+	webhooksFlags = webhooks.BindFlags(flag.CommandLine)
 )
 
 func init() {
@@ -59,6 +69,40 @@ func init() {
 	utilruntime.Must(openv1alpha1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
+}
+
+func runInit(setupClient client.Client) {
+	//_ = context.Background()
+
+	// if webhooksFlags.Install {
+	// 	// Generate webhook certificate
+	// 	if err := webhooks.GenerateCertificate(initContext, setupClient, webhooksFlags.CertOptions...); err != nil {
+	// 		setupLog.Error(err, "unable to generate webhook certificates")
+	// 		os.Exit(1)
+	// 	}
+
+	// Install webhooks
+	// err := webhooks.Install(
+	// 	initContext,
+	// 	setupClient,
+	// 	scheme,
+	// 	[]client.Object{
+	// 		&corev1beta1.ControlPlane{},
+	// 	},
+	// )
+	// if err != nil {
+	// 	setupLog.Error(err, "unable to configure webhooks")
+	// 	os.Exit(1)
+	// }
+	//}
+
+	// if crdFlags.Install {
+	// 	// Install CRDs
+	// 	if err := crds.Install(initContext, setupClient, crdFiles); err != nil {
+	// 		setupLog.Error(err, "unable to install Custom Resource Definitions")
+	// 		os.Exit(1)
+	// 	}
+	// }
 }
 
 // nolint:gocyclo
@@ -71,6 +115,7 @@ func main() {
 	var secureMetrics bool
 	var enableHTTP2 bool
 	var tlsOpts []func(*tls.Config)
+	var environment, verbosity string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
 		"Use :8443 for HTTPS or :8080 for HTTP, or leave as 0 to disable the metrics service.")
 	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
@@ -88,11 +133,19 @@ func main() {
 	flag.StringVar(&metricsCertKey, "metrics-cert-key", "tls.key", "The name of the metrics server key file.")
 	flag.BoolVar(&enableHTTP2, "enable-http2", false,
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
+	flag.StringVar(&environment, "environment", "", "The name of the environment to use for the provider.")
+	flag.StringVar(&verbosity, "verbosity", "", "The verbosity level for the logger.")
 	opts := zap.Options{
 		Development: true,
 	}
 	opts.BindFlags(flag.CommandLine)
 	flag.Parse()
+
+	// skip os.Args[1] which is the command (run or init)
+	if err := flag.CommandLine.Parse(os.Args[2:]); err != nil {
+		setupLog.Error(err, "failed to parse flags")
+		os.Exit(1)
+	}
 
 	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
@@ -116,6 +169,17 @@ func main() {
 
 	// Initial webhook TLS options
 	webhookTLSOpts := tlsOpts
+
+	setupClient, err := client.New(ctrl.GetConfigOrDie(), client.Options{Scheme: scheme})
+	if err != nil {
+		setupLog.Error(err, "unable to create client")
+		os.Exit(1)
+	}
+
+	if os.Args[1] == "init" {
+		runInit(setupClient)
+		return
+	}
 
 	if len(webhookCertPath) > 0 {
 		setupLog.Info("Initializing webhook certificate watcher using provided certificates",
