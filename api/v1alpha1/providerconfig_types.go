@@ -10,11 +10,11 @@ type ProviderConfigSpec struct{}
 // ProviderConfigStatus defines the observed state of ProviderConfig
 type ProviderConfigStatus struct{}
 
+// ProviderConfig is the Schema for the ProviderConfig API.
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:metadata:labels="openmcp.cloud/cluster=platform"
-
 type ProviderConfig struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
@@ -25,6 +25,7 @@ type ProviderConfig struct {
 
 // +kubebuilder:object:root=true
 
+// ProviderConfigList contains a list of ProviderConfig resources.
 type ProviderConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
