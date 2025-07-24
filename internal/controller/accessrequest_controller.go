@@ -32,8 +32,6 @@ import (
 
 	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
-	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
-
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
@@ -66,7 +64,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
-	cluster := &v1alpha1.Cluster{}
+	cluster := &openv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
 	}
