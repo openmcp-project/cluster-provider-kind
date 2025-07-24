@@ -8,6 +8,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
+// IsReady checks if the MetalLB components are ready.
 func IsReady(ctx context.Context, c client.Client) (bool, error) {
 	pods := &corev1.PodList{}
 	if err := c.List(ctx, pods, client.MatchingLabels{"app": "metallb"}); err != nil {

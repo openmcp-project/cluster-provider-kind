@@ -32,7 +32,7 @@ var (
 	kubeconfigPath = path.Join(os.TempDir(), "cluster-provider-kind.kubeconfig")
 )
 
-// KindProvider returns a new instance of the kind provider for managing Kubernetes clusters.
+// NewKindProvider returns a new instance of the kind provider for managing Kubernetes clusters.
 // It uses the default Docker-based kind provider configuration.
 func NewKindProvider() Provider {
 	return &kindProvider{

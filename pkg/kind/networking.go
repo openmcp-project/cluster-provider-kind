@@ -47,6 +47,7 @@ func getDockerContainerIP(containerName string) (net.IP, error) {
 	return parsed, nil
 }
 
+// GetDockerV4Network retrieves the IPv4 network configuration of the Docker network named "kind".
 func GetDockerV4Network(ctx context.Context) (net.IPNet, error) {
 	cmd := exec.CommandContext(ctx, "docker", "network", "inspect", "-f", "json", networkName)
 	cmdOut, err := cmd.Output()
@@ -81,6 +82,7 @@ func isIPv4(ipNet *net.IPNet) bool {
 	return ipNet.IP.To4() != nil
 }
 
+// NextAvailableLBNetwork finds the next available subnet for MetalLB in the Docker network.
 func NextAvailableLBNetwork(ctx context.Context, c client.Client) (net.IPNet, error) {
 	lockListClusters.Lock()
 	defer lockListClusters.Unlock()
@@ -101,7 +103,7 @@ func NextAvailableLBNetwork(ctx context.Context, c client.Client) (net.IPNet, er
 			return net.IPNet{}, err
 		}
 
-		taken, err := isIpNetTaken(subnet, clusters)
+		taken, err := isIPNetTaken(subnet, clusters)
 		if err != nil {
 			return net.IPNet{}, err
 		}
@@ -120,6 +122,7 @@ func calculateV4Subnet(input net.IPNet, offset int) (net.IPNet, error) {
 	ones, bits := input.Mask.Size()
 
 	// Subnet mask should be either 8 or 16 out of 32
+	// nolint:staticcheck
 	if !(ones == 8 || ones == 16) || bits != 32 {
 		return net.IPNet{}, errUnsupportedNetwork
 	}
@@ -133,7 +136,7 @@ func calculateV4Subnet(input net.IPNet, offset int) (net.IPNet, error) {
 	}, nil
 }
 
-func isIpNetTaken(ipnet net.IPNet, clusters *clustersv1alpha1.ClusterList) (bool, error) {
+func isIPNetTaken(ipnet net.IPNet, clusters *clustersv1alpha1.ClusterList) (bool, error) {
 	for _, c := range clusters.Items {
 		cNet, err := SubnetFromCluster(&c)
 		if err != nil {
@@ -149,6 +152,7 @@ func isIpNetTaken(ipnet net.IPNet, clusters *clustersv1alpha1.ClusterList) (bool
 	return false, nil
 }
 
+// SubnetFromCluster extracts the assigned subnet from the cluster annotations.
 func SubnetFromCluster(c *clustersv1alpha1.Cluster) (*net.IPNet, error) {
 	ipNetStr, ok := c.Annotations[AnnotationAssignedSubnet]
 	if !ok {

@@ -27,12 +27,13 @@ var (
 )
 
 const (
-	Namespace = "metallb-system"
+	namespace = "metallb-system"
 
 	resourceBaseYAML      = "metallb-native.yaml"
 	resourceKustomization = "kustomization.yaml"
 )
 
+// Install installs the MetalLB components in the cluster.
 func Install(ctx context.Context, c client.Client) error {
 	r, err := build()
 	if err != nil {
@@ -47,6 +48,7 @@ func Install(ctx context.Context, c client.Client) error {
 	return createObjects(ctx, c, objs)
 }
 
+// ConfigureSubnet configures the MetalLB subnet for the cluster.
 func ConfigureSubnet(ctx context.Context, c client.Client, subnet net.IPNet) error {
 	return errors.Join(
 		configureIPAddressPool(ctx, c, subnet),
@@ -62,7 +64,7 @@ func configureIPAddressPool(ctx context.Context, c client.Client, subnet net.IPN
 		Kind:    "IPAddressPool",
 	})
 	pool.SetName("kind")
-	pool.SetNamespace(Namespace)
+	pool.SetNamespace(namespace)
 
 	_, err := controllerutil.CreateOrUpdate(ctx, c, pool, func() error {
 		pool.Object["spec"] = map[string]any{
@@ -84,7 +86,7 @@ func configureL2Advertisement(ctx context.Context, c client.Client) error {
 		Kind:    "L2Advertisement",
 	})
 	l2a.SetName("kind")
-	l2a.SetNamespace(Namespace)
+	l2a.SetNamespace(namespace)
 
 	_, err := controllerutil.CreateOrUpdate(ctx, c, l2a, func() error {
 		// nothing to update
@@ -165,7 +167,7 @@ func getKustomization(images []types.Image) *types.Kustomization {
 			Kind:       types.KustomizationKind,
 			APIVersion: types.KustomizationVersion,
 		},
-		Namespace: Namespace,
+		Namespace: namespace,
 		Resources: []string{
 			resourceBaseYAML,
 		},
