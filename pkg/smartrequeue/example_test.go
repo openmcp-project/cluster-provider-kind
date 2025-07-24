@@ -27,6 +27,7 @@ func Example_controllerUsage() {
 		inProgress := false  // This would be determined by your logic
 		errOccurred := false // This would be determined by your logic
 
+		// nolint:gocritic
 		if errOccurred {
 			// Handle error case
 			err := fmt.Errorf("something went wrong")
