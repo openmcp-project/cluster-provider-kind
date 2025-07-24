@@ -17,6 +17,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"crypto/tls"
 	"embed"
 	"flag"
@@ -26,6 +27,7 @@ import (
 
 	// Import all Kubernetes client auth plugins (e.g. Azure, GCP, OIDC, etc.)
 	// to ensure that exec-entrypoint and run can make use of them.
+
 	"github.com/openmcp-project/controller-utils/pkg/init/crds"
 	"github.com/openmcp-project/controller-utils/pkg/init/webhooks"
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
@@ -44,7 +46,7 @@ import (
 
 	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
-	kindclustersopenmcpcloudv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+	kindv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/internal/controller"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
@@ -56,53 +58,53 @@ var (
 	setupLog = ctrl.Log.WithName("setup")
 
 	//go:embed embedded/crds
-	_ embed.FS
+	crdFiles embed.FS
 
-	_ = crds.BindFlags(flag.CommandLine)
-	_ = webhooks.BindFlags(flag.CommandLine)
+	crdFlags      = crds.BindFlags(flag.CommandLine)
+	webhooksFlags = webhooks.BindFlags(flag.CommandLine)
 )
 
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
-	utilruntime.Must(kindclustersopenmcpcloudv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(kindv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(openv1alpha1.AddToScheme(scheme))
 
 	// +kubebuilder:scaffold:scheme
 }
 
-func runInit(_ client.Client) {
-	// _ = context.Background()
+func runInit(setupClient client.Client) {
+	initContext := context.Background()
 
-	// if webhooksFlags.Install {
-	// 	// Generate webhook certificate
-	// 	if err := webhooks.GenerateCertificate(initContext, setupClient, webhooksFlags.CertOptions...); err != nil {
-	// 		setupLog.Error(err, "unable to generate webhook certificates")
-	// 		os.Exit(1)
-	// 	}
+	if webhooksFlags.Install {
+		// Generate webhook certificate
+		if err := webhooks.GenerateCertificate(initContext, setupClient, webhooksFlags.CertOptions...); err != nil {
+			setupLog.Error(err, "unable to generate webhook certificates")
+			os.Exit(1)
+		}
 
-	// Install webhooks
-	// err := webhooks.Install(
-	// 	initContext,
-	// 	setupClient,
-	// 	scheme,
-	// 	[]client.Object{
-	// 		&corev1beta1.ControlPlane{},
-	// 	},
-	// )
-	// if err != nil {
-	// 	setupLog.Error(err, "unable to configure webhooks")
-	// 	os.Exit(1)
-	// }
-	//}
+		// Install webhooks
+		err := webhooks.Install(
+			initContext,
+			setupClient,
+			scheme,
+			[]client.Object{
+				&kindv1alpha1.ProviderConfig{},
+			},
+		)
+		if err != nil {
+			setupLog.Error(err, "unable to configure webhooks")
+			os.Exit(1)
+		}
+	}
 
-	// if crdFlags.Install {
-	// 	// Install CRDs
-	// 	if err := crds.Install(initContext, setupClient, crdFiles); err != nil {
-	// 		setupLog.Error(err, "unable to install Custom Resource Definitions")
-	// 		os.Exit(1)
-	// 	}
-	// }
+	if crdFlags.Install {
+		// Install CRDs
+		if err := crds.Install(initContext, setupClient, crdFiles); err != nil {
+			setupLog.Error(err, "unable to install Custom Resource Definitions")
+			os.Exit(1)
+		}
+	}
 }
 
 // nolint:gocyclo
