@@ -1,18 +1,24 @@
-apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+apiVersion: clusters.openmcp.cloud/v1alpha1
 kind: Cluster
 metadata:
   name: one
-spec: {}
+spec:
+  profile: kind
+  tenancy: Exclusive
 ---
-apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+apiVersion: clusters.openmcp.cloud/v1alpha1
 kind: Cluster
 metadata:
   name: two
-spec: {}
+spec:
+  profile: kind
+  tenancy: Exclusive
 ---
-apiVersion: kind.clusters.openmcp.cloud/v1alpha1
+apiVersion: clusters.openmcp.cloud/v1alpha1
 kind: Cluster
 metadata:
   name: three
   namespace: kube-system
-spec: {}
+spec:
+  profile: kind
+  tenancy: Exclusive

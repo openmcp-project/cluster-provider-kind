@@ -43,6 +43,10 @@ var (
 	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
 )
 
+const (
+	profileKind = "kind"
+)
+
 // ClusterReconciler reconciles a Cluster object
 type ClusterReconciler struct {
 	client.Client
@@ -50,10 +54,6 @@ type ClusterReconciler struct {
 	RequeueStore *smartrequeue.Store
 	Provider     kind.Provider
 }
-
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=clusters,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=clusters/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=clusters/finalizers,verbs=update
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
@@ -71,8 +71,11 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Always try to update the status
-	// FIXME: error handling at the end?
 	defer r.Status().Update(ctx, cluster) //nolint:errcheck
+
+	if !isClusterProviderResponsible(cluster) {
+		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
+	}
 
 	ctx = smartrequeue.NewContext(ctx, r.RequeueStore.For(cluster))
 
@@ -230,4 +233,8 @@ func namespaceOrDefault(namespace string) string {
 		return metav1.NamespaceDefault
 	}
 	return namespace
+}
+
+func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
+	return cluster.Spec.Profile == profileKind
 }
