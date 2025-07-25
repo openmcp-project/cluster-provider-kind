@@ -10,10 +10,10 @@ repo: github.com/openmcp-project/cluster-provider-kind
 resources:
 - api:
     crdVersion: v1
-    namespaced: true
-  controller: true
+    namespaced: false
+  controller: false
   domain: kind.clusters.openmcp.cloud
-  kind: Cluster
+  kind: ProviderConfig
   path: github.com/openmcp-project/cluster-provider-kind/api/v1alpha1
   version: v1alpha1
 version: "3"
