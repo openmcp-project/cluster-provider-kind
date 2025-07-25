@@ -70,6 +70,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
+		// TODO: report event or status condition?
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
 	}
 
