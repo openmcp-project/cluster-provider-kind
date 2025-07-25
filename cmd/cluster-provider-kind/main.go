@@ -38,7 +38,7 @@ import (
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
-	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/api/crds"
 	kindv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
@@ -57,7 +57,7 @@ func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 
 	utilruntime.Must(kindv1alpha1.AddToScheme(scheme))
-	utilruntime.Must(openv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(clustersv1alpha1.AddToScheme(scheme))
 
 	utilruntime.Must(apiextensionsv1.AddToScheme(scheme))
 	// +kubebuilder:scaffold:scheme

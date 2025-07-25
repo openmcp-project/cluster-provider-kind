@@ -4,9 +4,10 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+
+	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
 )
 
 // This example shows how to use the SmartRequeue package in a Kubernetes controller.
@@ -26,6 +27,7 @@ func Example_controllerUsage() {
 		inProgress := false  // This would be determined by your logic
 		errOccurred := false // This would be determined by your logic
 
+		// nolint:gocritic
 		if errOccurred {
 			// Handle error case
 			err := fmt.Errorf("something went wrong")

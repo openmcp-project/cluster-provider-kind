@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
@@ -40,7 +40,7 @@ import (
 
 var (
 	// Finalizer is the finalizer for Cluster
-	Finalizer = openv1alpha1.GroupVersion.Group + "/finalizer"
+	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
 )
 
 // ClusterReconciler reconciles a Cluster object
@@ -62,7 +62,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	log.Info("Reconcile")
 	defer log.Info("Done")
 
-	cluster := &openv1alpha1.Cluster{}
+	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -83,7 +83,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	return r.handleCreateOrUpdate(ctx, cluster)
 }
 
-func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *openv1alpha1.Cluster) (ctrl.Result, error) {
+func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
 	cluster.Status.Phase = commonapi.StatusPhaseTerminating
 
@@ -114,7 +114,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *openv1alp
 }
 
 //nolint:gocyclo
-func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *openv1alpha1.Cluster) (ctrl.Result, error) {
+func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
 	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
@@ -201,12 +201,12 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *o
 // SetupWithManager sets up the controller with the Manager.
 func (r *ClusterReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&openv1alpha1.Cluster{}).
+		For(&clustersv1alpha1.Cluster{}).
 		Named("cluster").
 		Complete(r)
 }
 
-func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *openv1alpha1.Cluster) error {
+func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *clustersv1alpha1.Cluster) error {
 	_, ok := cluster.Annotations[kind.AnnotationAssignedSubnet]
 	if ok {
 		return nil
@@ -221,7 +221,7 @@ func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *openv1alp
 	return r.Update(ctx, cluster)
 }
 
-func kindName(cluster *openv1alpha1.Cluster) string {
+func kindName(cluster *clustersv1alpha1.Cluster) string {
 	return fmt.Sprintf("%s.%s", namespaceOrDefault(cluster.Namespace), cluster.Name)
 }
 

@@ -30,7 +30,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
-	openv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
@@ -55,7 +55,7 @@ type AccessRequestReconciler struct {
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
 	_ = logf.FromContext(ctx)
 
-	ar := &openv1alpha1.AccessRequest{}
+	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
@@ -64,7 +64,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
-	cluster := &openv1alpha1.Cluster{}
+	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
 	}
@@ -99,7 +99,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 // SetupWithManager sets up the controller with the Manager.
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
-		For(&openv1alpha1.AccessRequest{}).
+		For(&clustersv1alpha1.AccessRequest{}).
 		Named("accessrequest").
 		Complete(r)
 }

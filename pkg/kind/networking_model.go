@@ -30,7 +30,7 @@ type ConfigFrom struct {
 // Network represents the network configuration struct.
 type Network struct {
 	Name       string               `json:"Name"`
-	Id         string               `json:"Id"`
+	ID         string               `json:"ID"`
 	Created    string               `json:"Created"`
 	Scope      string               `json:"Scope"`
 	Driver     string               `json:"Driver"`
