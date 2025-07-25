@@ -78,16 +78,32 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
+	// handle deletion
+	if !ar.DeletionTimestamp.IsZero() {
+		return r.handleDelete(ctx, ar)
+	}
+
+	return r.handleCreateOrUpdate(ctx, ar, cluster)
+}
+
+func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
+	if controllerutil.AddFinalizer(ar, Finalizer) {
+		if err := r.Update(ctx, ar); err != nil {
+			return ctrl.Result{}, err
+		}
+	}
+
 	name := kindName(cluster)
 	kubeconfigStr, err := r.Provider.KubeConfig(name)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
 
+	s := getSecretNamespacedName(ar)
 	secret := &corev1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name:      ar.Name + ".kubeconfig",
-			Namespace: ar.Namespace,
+			Name:      s.Name,
+			Namespace: s.Namespace,
 		},
 	}
 	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
@@ -111,6 +127,22 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest) (ctrl.Result, error) {
+	// remove finalizer - Secret will automatically get deleted because of OwnerReference
+	controllerutil.RemoveFinalizer(ar, Finalizer)
+	if err := r.Update(ctx, ar); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
+}
+
+func getSecretNamespacedName(ar *clustersv1alpha1.AccessRequest) types.NamespacedName {
+	return types.NamespacedName{
+		Name:      ar.Name + ".kubeconfig",
+		Namespace: ar.Namespace,
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
