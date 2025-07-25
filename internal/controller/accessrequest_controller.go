@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -31,6 +32,7 @@ import (
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
@@ -49,7 +51,9 @@ type AccessRequestReconciler struct {
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = logf.FromContext(ctx)
+	log := logf.FromContext(ctx)
+	log.Info("Reconcile")
+	defer log.Info("Done")
 
 	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
@@ -59,10 +63,19 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
+	ar.Status.Phase = clustersv1alpha1.AccessRequestPending
+
+	defer r.Status().Update(ctx, ar) //nolint:errcheck
+
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
+	}
+
+	// Check if Cluster resource has the correct profile
+	if cluster.Spec.Profile != profileKind {
+		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
 	name := kindName(cluster)
@@ -85,10 +98,14 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		}
 		secret.Data["kubeconfig"] = []byte(kubeconfigStr)
 		return controllerutil.SetOwnerReference(ar, secret, r.Scheme)
-
-		// TODO: write kubeconfig to secret and reference secret in status of AccessRequest resource
-		// ignore clusterrequest ref
 	})
+
+	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
+	ar.Status.SecretRef = &commonapi.ObjectReference{
+		Name:      secret.Name,
+		Namespace: secret.Namespace,
+	}
+
 	return ctrl.Result{}, err
 }
 
