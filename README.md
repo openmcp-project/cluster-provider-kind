@@ -6,6 +6,27 @@
 
 A cluster provider for OpenMCP that uses [kind](https://kind.sigs.k8s.io/) to provision clusters. Ideal for local development and E2E tests.
 
+## Requirements and Setup
+
+In combination with the [openMCP Operator](https://github.com/openmcp-project/openmcp-operator), this operator can be deployed via a simple k8s resource:
+```yaml
+apiVersion: openmcp.cloud/v1alpha1
+kind: ClusterProvider
+metadata:
+  name: kind
+spec:
+  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
+```
+
+To run it locally, run
+```shell
+go run ./cmd/cluster-provider-kind/main.go init
+```
+to deploy the CRDs that are required for the operator and then
+```shell
+go run ./cmd/cluster-provider-kind/main.go run
+```
+
 ## How it works
 
 In order to create new kind clusters from within a kind cluster, the Docker socket (usually `/var/run/docker.sock`) needs to be available to the `cluster-provider-kind` pod. As a prerequisite, the Docker socket of the host machine must be mounted into the nodes of the platform kind cluster. In this case, there is only a single node (`platform-control-plane`). The socket can then be mounted by the cluster-provider-kind pod using a `hostPath` volume.
