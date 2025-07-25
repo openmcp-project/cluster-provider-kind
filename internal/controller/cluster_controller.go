@@ -43,6 +43,10 @@ var (
 	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
 )
 
+const (
+	profileKind = "kind"
+)
+
 // ClusterReconciler reconciles a Cluster object
 type ClusterReconciler struct {
 	client.Client
@@ -67,8 +71,12 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	}
 
 	// Always try to update the status
-	// FIXME: error handling at the end?
 	defer r.Status().Update(ctx, cluster) //nolint:errcheck
+
+	// Check if Cluster resource has the correct profile
+	if cluster.Spec.Profile != profileKind {
+		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
+	}
 
 	ctx = smartrequeue.NewContext(ctx, r.RequeueStore.For(cluster))
 
