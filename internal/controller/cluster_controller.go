@@ -73,8 +73,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 	// Always try to update the status
 	defer r.Status().Update(ctx, cluster) //nolint:errcheck
 
-	// Check if Cluster resource has the correct profile
-	if cluster.Spec.Profile != profileKind {
+	if !isClusterProviderResponsible(cluster) {
 		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
@@ -234,4 +233,8 @@ func namespaceOrDefault(namespace string) string {
 		return metav1.NamespaceDefault
 	}
 	return namespace
+}
+
+func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
+	return cluster.Spec.Profile == profileKind
 }
