@@ -101,7 +101,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	})
 
 	if err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to create or update secret: %w", err)
+		return ctrl.Result{}, fmt.Errorf("failed to create or update secret for access request %q/%q: %w", ar.Namespace, ar.Name, err)
 	}
 
 	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
