@@ -18,7 +18,8 @@ spec:
   image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
 ```
 
-To run it locally, run
+### Local Development
+To run it locally, please make sure to have a running [kind](https://kind.sigs.k8s.io/docs/user/quick-start/) cluster with kubectl context set to the kind cluster that serves as the platform cluster. You can then run the operator locally by executing:
 ```shell
 go run ./cmd/cluster-provider-kind/main.go init
 ```
