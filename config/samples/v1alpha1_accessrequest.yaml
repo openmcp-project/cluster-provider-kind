@@ -5,4 +5,5 @@ metadata:
 spec:
   clusterRef:
     name: one
-  rules: []
+    namespace: default
+  permissions: []
