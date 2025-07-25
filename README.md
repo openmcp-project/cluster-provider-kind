@@ -50,7 +50,7 @@ Apply the CRDs from the OpenMCP operator repository [here](https://github.com/op
 go run ./cmd/cluster-provider-kind/main.go init
 ```
 
-1. **Run the operator**:
+4. **Run the operator**:
 ```shell
 go run ./cmd/cluster-provider-kind/main.go run
 ```
