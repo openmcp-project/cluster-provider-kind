@@ -46,10 +46,6 @@ type AccessRequestReconciler struct {
 	Provider kind.Provider
 }
 
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=accessrequests,verbs=get;list;watch;create;update;patch;delete
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=accessrequests/status,verbs=get;update;patch
-// +kubebuilder:rbac:groups=kind.clusters.openmcp.cloud,resources=accessrequests/finalizers,verbs=update
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
