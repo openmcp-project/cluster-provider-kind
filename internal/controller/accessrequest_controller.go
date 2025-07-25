@@ -100,13 +100,17 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return controllerutil.SetOwnerReference(ar, secret, r.Scheme)
 	})
 
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("failed to create or update secret: %w", err)
+	}
+
 	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
 	ar.Status.SecretRef = &commonapi.ObjectReference{
 		Name:      secret.Name,
 		Namespace: secret.Namespace,
 	}
 
-	return ctrl.Result{}, err
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
