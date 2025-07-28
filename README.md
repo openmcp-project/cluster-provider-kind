@@ -4,9 +4,100 @@
 
 ## About this project
 
-A cluster provider for OpenMCP that uses [kind](https://kind.sigs.k8s.io/) to provision clusters. Ideal for local development and E2E tests.
+A cluster provider for [OpenMCP](https://github.com/openmcp-project/openmcp-operator) that uses [kind](https://kind.sigs.k8s.io/) (Kubernetes IN Docker) to provision and manage Kubernetes clusters. This provider enables you to create and manage multiple Kubernetes clusters running as Docker containers, making it ideal for:
+
+- **Local Development**: Quickly spin up multiple clusters for testing multi-cluster scenarios
+- **E2E Testing**: Automated testing of multi-cluster applications and operators
+- **CI/CD Pipelines**: Lightweight cluster provisioning for testing environments
+
+## Prerequisites
+
+Before using this cluster provider, ensure you have:
+
+- **Docker**: Running Docker daemon with socket accessible
+- **kind**: [kind CLI tool](https://kind.sigs.k8s.io/docs/user/quick-start/) installed
+- **kubectl**: For interacting with Kubernetes clusters
+
+## Installation
+
+### Production Deployment
+
+In combination with the [OpenMCP Operator](https://github.com/openmcp-project/openmcp-operator), this operator can be deployed via a simple Kubernetes resource:
+
+```yaml
+apiVersion: openmcp.cloud/v1alpha1
+kind: ClusterProvider
+metadata:
+  name: kind
+spec:
+  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
+```
+
+### Local Development
+
+To run the operator locally for development:
+
+1. **Start a platform kind cluster**:
+```shell
+kind create cluster --name platform
+kubectl config use-context kind-platform
+```
+2. Install the Platform CRDs of the openmcp-operator:
+Apply the CRDs from the OpenMCP operator repository [here](https://github.com/openmcp-project/openmcp-operator/tree/main/api/crds/manifests).
+
+3. **Initialize the CRDs**:
+```shell
+go run ./cmd/cluster-provider-kind/main.go init
+```
+
+4. **Run the operator**:
+```shell
+go run ./cmd/cluster-provider-kind/main.go run
+```
+
+## Usage Examples
+
+### Creating a Cluster
+
+Create a new kind cluster by applying a Cluster resource:
+
+```yaml
+apiVersion: clusters.openmcp.cloud/v1alpha1
+kind: Cluster
+metadata:
+  name: my-managedcontrolplane
+  namespace: default
+spec:
+  profile: kind  # This tells the kind provider to handle this cluster
+  tenancy: Exclusive
+```
+
+```shell
+kubectl apply -f cluster.yaml
+```
+
+### Requesting Access to a Cluster
+
+Create an AccessRequest to get kubeconfig for a cluster:
+
+```yaml
+apiVersion: clusters.openmcp.cloud/v1alpha1
+kind: AccessRequest
+metadata:
+  name: my-access
+  namespace: default
+spec:
+  clusterRef:
+    name: my-managedcontrolplane
+    namespace: default
+  permissions: []
+```
+
+The kubeconfig will be stored in a Secret in the same namespace as the `AccessRequest`.
 
 ## How it works
+
+### Docker Socket Access
 
 In order to create new kind clusters from within a kind cluster, the Docker socket (usually `/var/run/docker.sock`) needs to be available to the `cluster-provider-kind` pod. As a prerequisite, the Docker socket of the host machine must be mounted into the nodes of the platform kind cluster. In this case, there is only a single node (`platform-control-plane`). The socket can then be mounted by the cluster-provider-kind pod using a `hostPath` volume.
 
@@ -37,6 +128,8 @@ end
 style HostMachine fill:#eee
 ```
 
+### Platform Cluster Configuration
+
 The kind configuration for the platform cluster may look like this:
 
 ```yaml
@@ -48,7 +141,10 @@ nodes:
   - hostPath: /var/run/docker.sock
     containerPath: /var/run/host-docker.sock
 ```
- In order to test that the socket is functional, a simple pod can be deployed:
+
+### Testing Docker Socket Access
+
+In order to test that the socket is functional, a simple pod can be deployed:
 
 ```yaml
 apiVersion: v1
