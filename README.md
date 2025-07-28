@@ -139,7 +139,7 @@ nodes:
 - role: control-plane
   extraMounts:
   - hostPath: /var/run/docker.sock
-    containerPath: /var/run/docker.sock
+    containerPath: /var/run/host-docker.sock
 ```
 
 ### Testing Docker Socket Access
@@ -164,7 +164,7 @@ spec:
   volumes:
     - name: docker
       hostPath:
-        path: /var/run/docker.sock
+        path: /var/run/host-docker.sock
         type: Socket
 ```
 
