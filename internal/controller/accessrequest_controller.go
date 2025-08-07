@@ -36,8 +36,9 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
-	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
+
+	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
 var (
