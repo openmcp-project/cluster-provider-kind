@@ -82,7 +82,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if !isClusterProviderResponsible(cluster) {
-		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
+		return ctrl.Result{}, fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
 	// handle deletion
