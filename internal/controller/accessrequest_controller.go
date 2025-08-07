@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -35,6 +37,7 @@ import (
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
+	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 )
 
 var (
@@ -149,6 +152,10 @@ func getSecretNamespacedName(ar *clustersv1alpha1.AccessRequest) types.Namespace
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clustersv1alpha1.AccessRequest{}).
+		WithEventFilter(predicate.And(
+			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProviderLabel, "kind"),
+			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProfileLabel, ""),
+		)).
 		Named("accessrequest").
 		Complete(r)
 }
