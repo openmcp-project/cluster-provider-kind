@@ -70,6 +70,10 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	defer r.Status().Update(ctx, ar) //nolint:errcheck
 
+	if ar.Spec.ClusterRef == nil {
+		return ctrl.Result{}, fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name)
+	}
+
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
