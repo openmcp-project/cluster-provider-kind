@@ -95,6 +95,7 @@ func main() {
 	var probeAddr string
 	var secureMetrics bool
 	var enableHTTP2 bool
+	var providerName string
 	var tlsOpts []func(*tls.Config)
 	var environment, verbosity string
 	flag.StringVar(&metricsAddr, "metrics-bind-address", "0", "The address the metrics endpoint binds to. "+
@@ -116,6 +117,7 @@ func main() {
 		"If set, HTTP/2 will be enabled for the metrics and webhook servers")
 	flag.StringVar(&environment, "environment", "", "The name of the environment to use for the provider.")
 	flag.StringVar(&verbosity, "verbosity", "", "The verbosity level for the logger.")
+	flag.StringVar(&providerName, "provider-name", "kind", "The name of the provider. This is used to identify the provider in logs and metrics.")
 	opts := zap.Options{
 		Development: true,
 	}
