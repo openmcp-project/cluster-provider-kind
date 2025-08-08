@@ -21,6 +21,8 @@ import (
 	"errors"
 	"fmt"
 
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
+
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -33,6 +35,8 @@ import (
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
+
+	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
@@ -67,6 +71,10 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	defer r.Status().Update(ctx, ar) //nolint:errcheck
 
+	if ar.Spec.ClusterRef == nil {
+		return ctrl.Result{}, fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name)
+	}
+
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
@@ -75,7 +83,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	}
 
 	if !isClusterProviderResponsible(cluster) {
-		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
+		return ctrl.Result{}, fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
 	// handle deletion
@@ -149,6 +157,10 @@ func getSecretNamespacedName(ar *clustersv1alpha1.AccessRequest) types.Namespace
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clustersv1alpha1.AccessRequest{}).
+		WithEventFilter(predicate.And(
+			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProviderLabel, "kind"),
+			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProfileLabel, ""),
+		)).
 		Named("accessrequest").
 		Complete(r)
 }
