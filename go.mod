@@ -1,6 +1,6 @@
 module github.com/openmcp-project/cluster-provider-kind
 
-go 1.24.5
+go 1.24.6
 
 godebug default=go1.23
 
