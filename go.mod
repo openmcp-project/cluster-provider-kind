@@ -5,7 +5,7 @@ go 1.24.5
 godebug default=go1.23
 
 require (
-	github.com/openmcp-project/openmcp-operator/api v0.9.1
+	github.com/openmcp-project/openmcp-operator/api v0.10.0
 	github.com/stretchr/testify v1.10.0
 	k8s.io/api v0.33.3
 	k8s.io/apimachinery v0.33.3
