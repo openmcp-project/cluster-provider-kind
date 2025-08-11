@@ -67,7 +67,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	ar.Status.Phase = clustersv1alpha1.AccessRequestPending
+	ar.Status.Phase = clustersv1alpha1.AccessRequestPending // TODO: could be removed?! openmcp-operator might set this value as well
 
 	defer r.Status().Update(ctx, ar) //nolint:errcheck
 
@@ -75,7 +75,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name)
 	}
 
-	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Namespace}
+	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Spec.ClusterRef.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil {
 		// TODO: report event or status condition?
