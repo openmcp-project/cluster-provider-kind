@@ -30,7 +30,7 @@ kind: ClusterProvider
 metadata:
   name: kind
 spec:
-  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.8"
+  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
 ```
 
 ### Local Development
