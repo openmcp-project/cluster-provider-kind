@@ -30,7 +30,7 @@ kind: ClusterProvider
 metadata:
   name: kind
 spec:
-  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
+  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.8"
 ```
 
 ### Local Development
@@ -52,8 +52,10 @@ go run ./cmd/cluster-provider-kind/main.go init
 
 4. **Run the operator**:
 ```shell
-go run ./cmd/cluster-provider-kind/main.go run
+KIND_ON_LOCAL_HOST=true go run ./cmd/cluster-provider-kind/main.go run
 ```
+
+> **Note**: When running the operator outside the cluster (locally), you must set the `KIND_ON_LOCAL_HOST` environment variable to `true`. This tells the operator to use the local Docker socket configuration instead of the in-cluster configuration.
 
 ## Usage Examples
 
