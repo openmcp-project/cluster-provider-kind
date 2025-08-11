@@ -30,3 +30,5 @@ go.work
 
 # VS Code Go debug binaries
 bin/debug_bin*
+
+*.env
