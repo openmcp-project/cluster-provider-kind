@@ -102,7 +102,7 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 	}
 
 	name := kindName(cluster)
-	kubeconfigStr, err := r.Provider.KubeConfig(name)
+	kubeconfigStr, err := r.Provider.KubeConfig(name, false)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
