@@ -12,3 +12,4 @@ includes:
       COMPONENTS: 'cluster-provider-kind'
       REPO_URL: 'https://github.com/openmcp-project/cluster-provider-kind'
       CHART_COMPONENTS: "[]"
+      DOCKERFILE: '{{.ROOT_DIR}}/Dockerfile'

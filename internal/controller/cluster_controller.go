@@ -19,6 +19,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"os"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -151,7 +152,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		Reason: "ClusterExists",
 	})
 
-	kubeconfig, err := r.Provider.KubeConfig(name)
+	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
 	if err != nil {
 		return requeue.Error(err)
 	}
@@ -237,4 +238,9 @@ func namespaceOrDefault(namespace string) string {
 
 func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
 	return cluster.Spec.Profile == profileKind
+}
+
+// runsOnLocalHost returns true if the KIND_ON_LOCAL_HOST environment variable is set to "true".
+func runsOnLocalHost() bool {
+	return os.Getenv("KIND_ON_LOCAL_HOST") == "true"
 }

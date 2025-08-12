@@ -24,8 +24,8 @@ type Provider interface {
 	// ClusterExists checks if a Kubernetes cluster with the given name exists.
 	ClusterExists(name string) (bool, error)
 
-	// KubeConfig retrieves the kubeconfig for the specified cluster name.
-	KubeConfig(name string) (string, error)
+	// KubeConfig retrieves the kubeconfig for the specified cluster name. The bool localhosts indicates whether the function returns a kubeconfig with the local host IP or the container IP.
+	KubeConfig(name string, localhost bool) (string, error)
 }
 
 var (
@@ -73,8 +73,8 @@ func (p *kindProvider) DeleteCluster(name string) error {
 }
 
 // KubeConfig implements Provider.
-func (p *kindProvider) KubeConfig(name string) (string, error) {
-	kubeconfigStr, err := p.internal.KubeConfig(name, !runsOnLocalHost())
+func (p *kindProvider) KubeConfig(name string, localhost bool) (string, error) {
+	kubeconfigStr, err := p.internal.KubeConfig(name, !localhost)
 	if err != nil {
 		return "", err
 	}
@@ -87,11 +87,6 @@ func (p *kindProvider) KubeConfig(name string) (string, error) {
 	}
 
 	return strings.ReplaceAll(kubeconfigStr, "https://"+containerName, "https://"+containerIP.String()), nil
-}
-
-// runsOnLocalHost returns true if the KIND_ON_LOCAL_HOST environment variable is set to "true".
-func runsOnLocalHost() bool {
-	return os.Getenv("KIND_ON_LOCAL_HOST") == "true"
 }
 
 func (p *kindProvider) controlPlaneContainer(name string) string {
