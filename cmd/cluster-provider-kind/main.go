@@ -25,6 +25,7 @@ import (
 	"time"
 
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
@@ -39,6 +40,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
+	"github.com/openmcp-project/openmcp-operator/api/common"
 
 	"github.com/openmcp-project/cluster-provider-kind/api/crds"
 	kindv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
@@ -83,6 +85,31 @@ func runInit(setupClient client.Client) {
 			os.Exit(1)
 		}
 	}
+
+	cp := &clustersv1alpha1.ClusterProfile{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "kind",
+		},
+		Spec: clustersv1alpha1.ClusterProfileSpec{
+			ProviderRef: common.ObjectReference{
+				Name: "kind",
+			},
+			ProviderConfigRef: common.ObjectReference{
+				Name: "kind",
+			},
+			SupportedVersions: []clustersv1alpha1.SupportedK8sVersion{},
+		},
+	}
+
+	_, err = controllerutil.CreateOrUpdate(initContext, setupClient, cp, func() error {
+		return nil
+	})
+
+	if err != nil {
+		setupLog.Error(err, "Failed to create/update ClusterProfile", "name", cp.Name)
+		os.Exit(1)
+	}
+
 	setupLog.Info("Init command completed successfully")
 }
 

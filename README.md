@@ -10,7 +10,7 @@ A cluster provider for [OpenMCP](https://github.com/openmcp-project/openmcp-oper
 - **E2E Testing**: Automated testing of multi-cluster applications and operators
 - **CI/CD Pipelines**: Lightweight cluster provisioning for testing environments
 
-## Prerequisites
+## 🧪 Prerequisites
 
 Before using this cluster provider, ensure you have:
 
@@ -18,11 +18,43 @@ Before using this cluster provider, ensure you have:
 - **kind**: [kind CLI tool](https://kind.sigs.k8s.io/docs/user/quick-start/) installed
 - **kubectl**: For interacting with Kubernetes clusters
 
-## Installation
+## 🏗️ Installation
 
-### Production Deployment
+### Local Development
 
-In combination with the [OpenMCP Operator](https://github.com/openmcp-project/openmcp-operator), this operator can be deployed via a simple Kubernetes resource:
+To run the cluster-provider-kind on your local machine, you need to first bootstrap an openMCP environment by using [openmcp-operator](https://github.com/openmcp-project/openmcp-operator). A comprehensive guide will follow soon.
+
+In order to run the cluster-provider-kind properly, it is necessary to configure the openMCP Platform cluster with the Docker socket mounted into the nodes. Please use the following kind cluster configuration:
+```yaml
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+nodes:
+- role: control-plane
+  extraMounts:
+  - hostPath: /var/run/docker.sock
+    containerPath: /var/run/host-docker.sock
+```
+
+You can create the Platform cluster using the above configuration by running:
+
+```shell
+kind create cluster --name platform --config ./path/to/config
+kubectl config use-context kind-platform
+```
+
+For current testing reasons, it is recommended to test and run the cluster-provider-kind in the cluster. To run the latest version of your changes in your local environment, you need to run:
+
+```bash
+task build:img:build
+```
+
+This will build the image of the cluster-provider-kind and push it to your local Docker registry.
+
+```bash
+docker images ghcr.io/openmcp-project/images/cluster-provider-kind
+```
+
+You can then apply the `ClusterProvider` resource to your openMCP Platform cluster:
 
 ```yaml
 apiVersion: openmcp.cloud/v1alpha1
@@ -30,74 +62,87 @@ kind: ClusterProvider
 metadata:
   name: kind
 spec:
-  image: "ghcr.io/openmcp-project/images/cluster-provider-kind:<latest-version>"
+  image: ghcr.io/openmcp-project/images/cluster-provider-kind:... # latest local docker image build
+  extraVolumeMounts:
+    - mountPath: /var/run/docker.sock
+      name: docker
+  extraVolumes:
+    - name: docker
+      hostPath:
+        path: /var/run/host-docker.sock
+        type: Socket
 ```
 
-### Local Development
+### Running Cluster Provider kind outside the cluster (not recommended)
+You can also run the cluster-provider-kind outside the cluster, but this is not recommended at the moment, since the operator might not work as expected due to some IP address issues with your Docker network access.
 
-To run the operator locally for development:
-
-1. **Start a platform kind cluster**:
-```shell
-kind create cluster --name platform
-kubectl config use-context kind-platform
-```
-2. Install the Platform CRDs of the openmcp-operator:
-Apply the CRDs from the OpenMCP operator repository [here](https://github.com/openmcp-project/openmcp-operator/tree/main/api/crds/manifests).
-
-3. **Initialize the CRDs**:
-```shell
+The following steps will help you to run the cluster-provider-kind outside the cluster:
+1. Initialize the CRDs:
+```bash
 go run ./cmd/cluster-provider-kind/main.go init
 ```
 
-4. **Run the operator**:
-```shell
+2. Run the operator:
+```bash
 KIND_ON_LOCAL_HOST=true go run ./cmd/cluster-provider-kind/main.go run
 ```
 
 > **Note**: When running the operator outside the cluster (locally), you must set the `KIND_ON_LOCAL_HOST` environment variable to `true`. This tells the operator to use the local Docker socket configuration instead of the in-cluster configuration.
 
-## Usage Examples
+## 📖 Usage
 
-### Creating a Cluster
+### Creating a `Cluster` via `ClusterRequest`
 
-Create a new kind cluster by applying a Cluster resource:
+Create a new kind cluster by applying a `ClusterRequest` resource:
 
 ```yaml
 apiVersion: clusters.openmcp.cloud/v1alpha1
-kind: Cluster
+kind: ClusterRequest
 metadata:
-  name: my-managedcontrolplane
+  name: mcp
   namespace: default
 spec:
-  profile: kind  # This tells the kind provider to handle this cluster
-  tenancy: Exclusive
+  purpose: mcp
 ```
 
 ```shell
-kubectl apply -f cluster.yaml
+kubectl apply -f clusterrequest.yaml
 ```
 
-### Requesting Access to a Cluster
+## 🧑‍💻 Development
 
-Create an AccessRequest to get kubeconfig for a cluster:
+### Building the binary locally
 
-```yaml
-apiVersion: clusters.openmcp.cloud/v1alpha1
-kind: AccessRequest
-metadata:
-  name: my-access
-  namespace: default
-spec:
-  clusterRef:
-    name: my-managedcontrolplane
-    namespace: default
-  permissions: []
+To build the binary locally, you can use the following command:
+
+```bash
+task build
 ```
 
-The kubeconfig will be stored in a Secret in the same namespace as the `AccessRequest`.
+### Build the image locally
 
-## How it works
+To build the image locally, you can use the following command:
+
+```bash
+task build:img:build
+```
+
+### Run unit tests locally
+
+To run the unit tests locally, you can use the following command:
+
+```bash
+task test
+```
+
+### Generating the CRDs, DeepCopy functions etc.
+To generate the CRDs, DeepCopy functions, and other boilerplate code, you can use the following command:
+
+```bash
+task generate
+```
+
+## 🏋️ How it works
 
 ### Docker Socket Access
 
@@ -199,17 +244,18 @@ platform
 test
 ```
 
-## Support, Feedback, Contributing
+## ❤️ Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/openmcp-project/cluster-provider-kind/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
 
-## Security / Disclosure
+## 🔐 Security / Disclosure
+
 If you find any bug that may be a security problem, please follow our instructions at [in our security policy](https://github.com/openmcp-project/cluster-provider-kind/security/policy) on how to report it. Please do not create GitHub issues for security-related doubts or problems.
 
-## Code of Conduct
+## 🤝 Code of Conduct
 
 We as members, contributors, and leaders pledge to make participation in our community a harassment-free experience for everyone. By participating in this project, you agree to abide by its [Code of Conduct](https://github.com/SAP/.github/blob/main/CODE_OF_CONDUCT.md) at all times.
 
-## Licensing
+## 📋 Licensing
 
 Copyright 2025 SAP SE or an SAP affiliate company and cluster-provider-kind contributors. Please see our [LICENSE](LICENSE) for copyright and license information. Detailed information including third-party components and their licensing/copyright information is available [via the REUSE tool](https://api.reuse.software/info/github.com/openmcp-project/cluster-provider-kind).
