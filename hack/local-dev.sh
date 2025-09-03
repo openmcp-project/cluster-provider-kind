@@ -1,6 +1,6 @@
 kind delete clusters --all
 
-OPENMCP_OPERATOR_VERSION=v0.12.0-dev-1a771c3cc5f8e2f556c08d5027615e8134c3ac70-linux-amd64
+OPENMCP_OPERATOR_VERSION=v0.13.0
 OPENMCP_OPERATOR_IMAGE=ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}
 
 OPENMCP_CP_KIND_VERSION=v0.0.12-dev-833b7e03cf1205f4405d21eaf1524d9e5bd29373-linux-amd64
