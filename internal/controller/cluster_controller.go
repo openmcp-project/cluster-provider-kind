@@ -151,6 +151,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterExists",
 	})
+	// TODO: Add kind cluster name to status
 
 	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
 	if err != nil {
@@ -226,14 +227,7 @@ func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *clustersv
 }
 
 func kindName(cluster *clustersv1alpha1.Cluster) string {
-	return fmt.Sprintf("%s.%s", namespaceOrDefault(cluster.Namespace), cluster.Name)
-}
-
-func namespaceOrDefault(namespace string) string {
-	if namespace == "" {
-		return metav1.NamespaceDefault
-	}
-	return namespace
+	return fmt.Sprintf("%s.%s", cluster.Name, string(cluster.UID)[:8])
 }
 
 func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
