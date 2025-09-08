@@ -1,15 +1,17 @@
-kind delete clusters --all
+# kind delete clusters --all
+# task build:img:build
 
 OPENMCP_OPERATOR_VERSION=v0.13.0
 OPENMCP_OPERATOR_IMAGE=ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}
 
-OPENMCP_CP_KIND_VERSION=v0.0.12-dev-833b7e03cf1205f4405d21eaf1524d9e5bd29373-linux-amd64
+OPENMCP_CP_KIND_VERSION=$(task version)-linux-amd64
 OPENMCP_CP_KIND_IMAGE=ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_VERSION}
 
 OPENMCP_ENVIRONMENT=debug
+OPENMCP_PLATFORM_NAME=platform
 
 # Create platform cluster
-kind create cluster --name platform --config - << EOF
+kind create cluster --name ${OPENMCP_PLATFORM_NAME} --config - << EOF
 apiVersion: kind.x-k8s.io/v1alpha4
 kind: Cluster
 nodes:
@@ -20,8 +22,8 @@ nodes:
 EOF
 
 # Load images
-kind load docker-image --name platform ${OPENMCP_OPERATOR_IMAGE}
-kind load docker-image --name platform ${OPENMCP_CP_KIND_IMAGE}
+kind load docker-image --name ${OPENMCP_PLATFORM_NAME} ${OPENMCP_OPERATOR_IMAGE}
+kind load docker-image --name ${OPENMCP_PLATFORM_NAME} ${OPENMCP_CP_KIND_IMAGE}
 
 # Create openmcp-system Namespace
 kubectl apply -f - << EOF
@@ -183,7 +185,8 @@ spec:
 EOF
 
 # Wait for ClusterProvider CRD to be created
-kubectl wait --for=create customresourcedefinitions.apiextensions.k8s.io/clusterproviders.openmcp.cloud --timeout=30s
+echo Waiting for ClusterProvider CRD to be available...
+kubectl wait --for=create customresourcedefinitions.apiextensions.k8s.io/clusterproviders.openmcp.cloud --timeout=60s || exit 1
 
 # Install ClusterProvider for kind
 kubectl apply -f - << EOF
@@ -201,4 +204,30 @@ spec:
   extraVolumeMounts:
   - name: docker-socket
     mountPath: /var/run/docker.sock
+EOF
+
+# Install Service Provider Crossplane
+kubectl apply -f - << EOF
+apiVersion: openmcp.cloud/v1alpha1
+kind: ServiceProvider
+metadata:
+  name: crossplane
+spec:
+  image: ghcr.io/openmcp-project/images/service-provider-crossplane:v0.0.4
+EOF
+
+echo Waiting for the onboarding cluster to be created...
+kubectl wait --for=create -n openmcp-system cluster/onboarding --timeout=60s || exit 1
+echo Waiting for the onboarding cluster to be ready...
+kubectl wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' -n openmcp-system cluster/onboarding --timeout=120s || exit 1
+kind export kubeconfig --name $(kind get clusters | grep onboarding -m 1) || exit 1
+
+# Install Service Provider Crossplane
+kubectl apply -f - << EOF
+apiVersion: core.openmcp.cloud/v2alpha1
+kind: ManagedControlPlaneV2
+metadata:
+  name: test
+spec:
+  iam: {}
 EOF
