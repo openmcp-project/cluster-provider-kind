@@ -34,6 +34,7 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
+	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/metallb"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
@@ -42,6 +43,9 @@ import (
 var (
 	// Finalizer is the finalizer for Cluster
 	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
+
+	// AnnotationName can be used to override the name of the kind cluster.
+	AnnotationName = v1alpha1.GroupVersion.Group + "/name"
 )
 
 const (
@@ -227,6 +231,9 @@ func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *clustersv
 }
 
 func kindName(cluster *clustersv1alpha1.Cluster) string {
+	if name, ok := cluster.Annotations[AnnotationName]; ok {
+		return name
+	}
 	return fmt.Sprintf("%s.%s", cluster.Name, string(cluster.UID)[:8])
 }
 
