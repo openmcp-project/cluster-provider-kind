@@ -206,6 +206,23 @@ spec:
     mountPath: /var/run/docker.sock
 EOF
 
+# Create Cluster resource for platform
+kubectl apply -f - << EOF
+apiVersion: clusters.openmcp.cloud/v1alpha1
+kind: Cluster
+metadata:
+  annotations:
+    kind.clusters.openmcp.cloud/name: ${OPENMCP_PLATFORM_NAME}
+  name: platform
+  namespace: openmcp-system
+spec:
+  kubernetes: {}
+  profile: kind
+  purposes:
+  - platform
+  tenancy: Shared
+EOF
+
 # Install Service Provider Crossplane
 kubectl apply -f - << EOF
 apiVersion: openmcp.cloud/v1alpha1
