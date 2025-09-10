@@ -12,3 +12,5 @@ includes:
       REPO_URL: 'https://github.com/openmcp-project/cluster-provider-kind'
       CHART_COMPONENTS: "[]"
       DOCKERFILE: '{{.ROOT_DIR}}/Dockerfile'
+      CRDS_COMPONENTS: 'cluster-provider-kind'
+      CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
