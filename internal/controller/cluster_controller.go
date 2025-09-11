@@ -34,6 +34,7 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
+	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/metallb"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
@@ -42,6 +43,9 @@ import (
 var (
 	// Finalizer is the finalizer for Cluster
 	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
+
+	// AnnotationName can be used to override the name of the kind cluster.
+	AnnotationName = v1alpha1.GroupVersion.Group + "/name"
 )
 
 const (
@@ -151,6 +155,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterExists",
 	})
+	// TODO: Add kind cluster name to status
 
 	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
 	if err != nil {
@@ -226,14 +231,10 @@ func (r *ClusterReconciler) assignSubnet(ctx context.Context, cluster *clustersv
 }
 
 func kindName(cluster *clustersv1alpha1.Cluster) string {
-	return fmt.Sprintf("%s.%s", namespaceOrDefault(cluster.Namespace), cluster.Name)
-}
-
-func namespaceOrDefault(namespace string) string {
-	if namespace == "" {
-		return metav1.NamespaceDefault
+	if name, ok := cluster.Annotations[AnnotationName]; ok {
+		return name
 	}
-	return namespace
+	return fmt.Sprintf("%s.%s", cluster.Name, string(cluster.UID)[:8])
 }
 
 func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {

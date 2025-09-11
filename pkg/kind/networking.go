@@ -12,6 +12,8 @@ import (
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 
+	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
+
 	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
@@ -28,7 +30,7 @@ var (
 	errInvalidIP           = errors.New("invalid textual representation of an IP address")
 
 	// AnnotationAssignedSubnet is the annotation used to store the assigned subnet for a cluster
-	AnnotationAssignedSubnet = clustersv1alpha1.GroupVersion.Group + "/assigned-subnet"
+	AnnotationAssignedSubnet = v1alpha1.GroupVersion.Group + "/assigned-subnet"
 	lockListClusters         = sync.Mutex{}
 )
 

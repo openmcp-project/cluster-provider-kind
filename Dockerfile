@@ -5,7 +5,7 @@ ARG COMPONENT
 WORKDIR /
 COPY bin/$COMPONENT.$TARGETOS-$TARGETARCH /<component>
 RUN apk add --no-cache docker-cli kind
-USER 65532:65532
+# USER 65532:65532
 
 # docker doesn't substitue args in ENTRYPOINT, so we replace this during the build script
 ENTRYPOINT ["/<component>"]
