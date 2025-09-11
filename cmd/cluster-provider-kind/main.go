@@ -91,10 +91,10 @@ func runInit(setupClient client.Client) {
 			Name: "kind",
 		},
 		Spec: clustersv1alpha1.ClusterProfileSpec{
-			ProviderRef: common.ObjectReference{
+			ProviderRef: common.LocalObjectReference{
 				Name: "kind",
 			},
-			ProviderConfigRef: common.ObjectReference{
+			ProviderConfigRef: common.LocalObjectReference{
 				Name: "kind",
 			},
 			SupportedVersions: []clustersv1alpha1.SupportedK8sVersion{},
