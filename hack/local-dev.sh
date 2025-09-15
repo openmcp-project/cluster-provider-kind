@@ -1,10 +1,13 @@
+#!/bin/bash
+set -e -o pipefail
+
 # kind delete clusters --all
 # task build:img:build
 
 OPENMCP_OPERATOR_VERSION=v0.13.0
 OPENMCP_OPERATOR_IMAGE=ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}
 
-OPENMCP_CP_KIND_VERSION=$(task version)-linux-amd64
+OPENMCP_CP_KIND_VERSION=$(task version)-linux-$(go env GOARCH)
 OPENMCP_CP_KIND_IMAGE=ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_VERSION}
 
 OPENMCP_ENVIRONMENT=debug
@@ -20,6 +23,10 @@ nodes:
   - hostPath: /var/run/docker.sock
     containerPath: /var/run/host-docker.sock
 EOF
+
+# Pull images if needed
+docker image inspect ${OPENMCP_OPERATOR_IMAGE} || docker image pull ${OPENMCP_OPERATOR_IMAGE}
+docker image inspect ${OPENMCP_CP_KIND_IMAGE} || docker image pull ${OPENMCP_CP_KIND_IMAGE}
 
 # Load images
 kind load docker-image --name ${OPENMCP_PLATFORM_NAME} ${OPENMCP_OPERATOR_IMAGE}
@@ -186,7 +193,7 @@ EOF
 
 # Wait for ClusterProvider CRD to be created
 echo Waiting for ClusterProvider CRD to be available...
-kubectl wait --for=create customresourcedefinitions.apiextensions.k8s.io/clusterproviders.openmcp.cloud --timeout=60s || exit 1
+kubectl wait --for=create customresourcedefinitions.apiextensions.k8s.io/clusterproviders.openmcp.cloud --timeout=60s
 
 # Install ClusterProvider for kind
 kubectl apply -f - << EOF
@@ -234,10 +241,10 @@ spec:
 EOF
 
 echo Waiting for the onboarding cluster to be created...
-kubectl wait --for=create -n openmcp-system cluster/onboarding --timeout=60s || exit 1
+kubectl wait --for=create -n openmcp-system cluster/onboarding --timeout=60s
 echo Waiting for the onboarding cluster to be ready...
-kubectl wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' -n openmcp-system cluster/onboarding --timeout=120s || exit 1
-kind export kubeconfig --name $(kind get clusters | grep onboarding -m 1) || exit 1
+kubectl wait --for='jsonpath={.status.conditions[?(@.type=="Ready")].status}=True' -n openmcp-system cluster/onboarding --timeout=120s
+kind export kubeconfig --name $(kind get clusters | grep onboarding -m 1)
 
 # Install Service Provider Crossplane
 kubectl apply -f - << EOF
