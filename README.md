@@ -244,6 +244,12 @@ platform
 test
 ```
 
+## Troubleshooting
+
+### ERROR: failed to create cluster: could not find a log line that matches...
+
+Solution: Increase the inotify resource limits. See https://kind.sigs.k8s.io/docs/user/known-issues/#pod-errors-due-to-too-many-open-files.
+
 ## ❤️ Support, Feedback, Contributing
 
 This project is open to feature requests/suggestions, bug reports etc. via [GitHub issues](https://github.com/openmcp-project/cluster-provider-kind/issues). Contribution and feedback are encouraged and always welcome. For more information about how to contribute, the project structure, as well as additional contribution information, see our [Contribution Guidelines](CONTRIBUTING.md).
