@@ -92,12 +92,27 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
 	requeue := smartrequeue.FromContext(ctx)
 	cluster.Status.Phase = commonapi.StatusPhaseTerminating
 
-	if !controllerutil.ContainsFinalizer(cluster, Finalizer) {
+	// check if there are any foreign finalizers on the Cluster resource
+	foreignFinalizers := make([]string, 0, len(cluster.Finalizers))
+	found := false
+	for _, fin := range cluster.Finalizers {
+		if fin != Finalizer {
+			foreignFinalizers = append(foreignFinalizers, fin)
+		} else {
+			found = true
+		}
+	}
+	if !found {
 		// Nothing to do
 		return ctrl.Result{}, nil
+	}
+	if len(foreignFinalizers) > 0 {
+		log.Info("Postponing cluster deletion until foreign finalizers are removed", "foreignFinalizers", foreignFinalizers)
+		return requeue.Progressing()
 	}
 
 	name := kindName(cluster)
