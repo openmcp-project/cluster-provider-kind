@@ -97,15 +97,7 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv
 	cluster.Status.Phase = commonapi.StatusPhaseTerminating
 
 	// check if there are any foreign finalizers on the Cluster resource
-	foreignFinalizers := make([]string, 0, len(cluster.Finalizers))
-	found := false
-	for _, fin := range cluster.Finalizers {
-		if fin != Finalizer {
-			foreignFinalizers = append(foreignFinalizers, fin)
-		} else {
-			found = true
-		}
-	}
+	foreignFinalizers, found := identifyFinalizers(cluster)
 	if !found {
 		// Nothing to do
 		return ctrl.Result{}, nil
@@ -259,4 +251,20 @@ func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
 // runsOnLocalHost returns true if the KIND_ON_LOCAL_HOST environment variable is set to "true".
 func runsOnLocalHost() bool {
 	return os.Getenv("KIND_ON_LOCAL_HOST") == "true"
+}
+
+// identifyFinalizers checks two things for the given object:
+// 1. If the 'clusters.openmcp.cloud/finalizer' finalizer is present (second return value).
+// 2. Which other finalizers are present (first return value).
+func identifyFinalizers(obj client.Object) ([]string, bool) {
+	foreignFinalizers := make([]string, 0, len(obj.GetFinalizers()))
+	found := false
+	for _, fin := range obj.GetFinalizers() {
+		if fin != Finalizer {
+			foreignFinalizers = append(foreignFinalizers, fin)
+		} else {
+			found = true
+		}
+	}
+	return foreignFinalizers, found
 }
