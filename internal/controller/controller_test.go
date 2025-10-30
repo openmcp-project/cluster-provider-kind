@@ -1,51 +1,64 @@
 package controller
 
 import (
-	. "github.com/onsi/ginkgo/v2"
-	. "github.com/onsi/gomega"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"reflect"
+	"testing"
 
 	corev1 "k8s.io/api/core/v1"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 )
 
-var _ = Describe("Helper Functions Test", func() {
+func TestIdentifyFinalizers(t *testing.T) {
+	tests := []struct {
+		name                      string
+		inputFinalizers           []string
+		expectedForeignFinalizers []string
+		expectedOwnFinalizer      bool
+	}{
+		{
+			name:                      "no finalizers on the object at all",
+			inputFinalizers:           []string{},
+			expectedForeignFinalizers: []string{},
+			expectedOwnFinalizer:      false,
+		},
+		{
+			name:                      "only the own finalizer on the object",
+			inputFinalizers:           []string{Finalizer},
+			expectedForeignFinalizers: []string{},
+			expectedOwnFinalizer:      true,
+		},
+		{
+			name:                      "only other finalizers on the object",
+			inputFinalizers:           []string{"other/finalizer1", "other/finalizer2"},
+			expectedForeignFinalizers: []string{"other/finalizer1", "other/finalizer2"},
+			expectedOwnFinalizer:      false,
+		},
+		{
+			name:                      "both own and other finalizers on the object",
+			inputFinalizers:           []string{"other/finalizer1", Finalizer, "other/finalizer2"},
+			expectedForeignFinalizers: []string{"other/finalizer1", "other/finalizer2"},
+			expectedOwnFinalizer:      true,
+		},
+	}
 
-	Context("identifyFinalizers", func() {
-
-		It("should work correctly with no finalizers on the object at all", func() {
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
 			obj := &corev1.Namespace{}
-			ff, own := identifyFinalizers(obj)
-			Expect(ff).To(BeEmpty())
-			Expect(own).To(BeFalse())
+
+			// Add input finalizers to the objeXx
+			for _, finalizer := range tt.inputFinalizers {
+				controllerutil.AddFinalizer(obj, finalizer)
+			}
+
+			foreignFinalizers, ownFinalizer := identifyFinalizers(obj)
+
+			// Assert the results
+			if !reflect.DeepEqual(foreignFinalizers, tt.expectedForeignFinalizers) {
+				t.Errorf("identifyFinalizers() foreignFinalizers = %v, want %v", foreignFinalizers, tt.expectedForeignFinalizers)
+			}
+			if ownFinalizer != tt.expectedOwnFinalizer {
+				t.Errorf("identifyFinalizers() ownFinalizer = %v, want %v", ownFinalizer, tt.expectedOwnFinalizer)
+			}
 		})
-
-		It("should work correctly with only the own finalizer on the object", func() {
-			obj := &corev1.Namespace{}
-			controllerutil.AddFinalizer(obj, Finalizer)
-			ff, own := identifyFinalizers(obj)
-			Expect(ff).To(BeEmpty())
-			Expect(own).To(BeTrue())
-		})
-
-		It("should work correctly with only other finalizers on the object", func() {
-			obj := &corev1.Namespace{}
-			controllerutil.AddFinalizer(obj, "other/finalizer1")
-			controllerutil.AddFinalizer(obj, "other/finalizer2")
-			ff, own := identifyFinalizers(obj)
-			Expect(ff).To(ConsistOf("other/finalizer1", "other/finalizer2"))
-			Expect(own).To(BeFalse())
-		})
-
-		It("should work correctly with both own and other finalizers on the object", func() {
-			obj := &corev1.Namespace{}
-			controllerutil.AddFinalizer(obj, "other/finalizer1")
-			controllerutil.AddFinalizer(obj, Finalizer)
-			controllerutil.AddFinalizer(obj, "other/finalizer2")
-			ff, own := identifyFinalizers(obj)
-			Expect(ff).To(ConsistOf("other/finalizer1", "other/finalizer2"))
-			Expect(own).To(BeTrue())
-		})
-
-	})
-
-})
+	}
+}
