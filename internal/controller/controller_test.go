@@ -45,14 +45,12 @@ func TestIdentifyFinalizers(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			obj := &corev1.Namespace{}
 
-			// Add input finalizers to the objeXx
 			for _, finalizer := range tt.inputFinalizers {
 				controllerutil.AddFinalizer(obj, finalizer)
 			}
 
 			foreignFinalizers, ownFinalizer := identifyFinalizers(obj)
 
-			// Assert the results
 			if !reflect.DeepEqual(foreignFinalizers, tt.expectedForeignFinalizers) {
 				t.Errorf("identifyFinalizers() foreignFinalizers = %v, want %v", foreignFinalizers, tt.expectedForeignFinalizers)
 			}
