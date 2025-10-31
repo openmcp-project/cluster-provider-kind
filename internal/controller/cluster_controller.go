@@ -92,12 +92,19 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 }
 
 func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
+	log := logf.FromContext(ctx)
 	requeue := smartrequeue.FromContext(ctx)
 	cluster.Status.Phase = commonapi.StatusPhaseTerminating
 
-	if !controllerutil.ContainsFinalizer(cluster, Finalizer) {
+	// check if there are any foreign finalizers on the Cluster resource
+	foreignFinalizers, found := identifyFinalizers(cluster)
+	if !found {
 		// Nothing to do
 		return ctrl.Result{}, nil
+	}
+	if len(foreignFinalizers) > 0 {
+		log.Info("Postponing cluster deletion until foreign finalizers are removed", "foreignFinalizers", foreignFinalizers)
+		return requeue.Progressing()
 	}
 
 	name := kindName(cluster)
@@ -244,4 +251,20 @@ func isClusterProviderResponsible(cluster *clustersv1alpha1.Cluster) bool {
 // runsOnLocalHost returns true if the KIND_ON_LOCAL_HOST environment variable is set to "true".
 func runsOnLocalHost() bool {
 	return os.Getenv("KIND_ON_LOCAL_HOST") == "true"
+}
+
+// identifyFinalizers checks two things for the given object:
+// 1. If the 'clusters.openmcp.cloud/finalizer' finalizer is present (second return value).
+// 2. Which other finalizers are present (first return value).
+func identifyFinalizers(obj client.Object) ([]string, bool) {
+	foreignFinalizers := make([]string, 0, len(obj.GetFinalizers()))
+	found := false
+	for _, fin := range obj.GetFinalizers() {
+		if fin != Finalizer {
+			foreignFinalizers = append(foreignFinalizers, fin)
+		} else {
+			found = true
+		}
+	}
+	return foreignFinalizers, found
 }
