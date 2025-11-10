@@ -129,9 +129,8 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 	}
 
 	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
-	ar.Status.SecretRef = &commonapi.ObjectReference{
-		Name:      secret.Name,
-		Namespace: secret.Namespace,
+	ar.Status.SecretRef = &commonapi.LocalObjectReference{
+		Name: secret.Name,
 	}
 
 	return ctrl.Result{}, nil
