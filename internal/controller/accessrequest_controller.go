@@ -77,12 +77,11 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Spec.ClusterRef.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
-	if err := r.Get(ctx, clusterRef, cluster); err != nil {
+	if err := r.Get(ctx, clusterRef, cluster); err != nil && !apierrors.IsNotFound(err) {
 		// TODO: report event or status condition?
 		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
-	}
 
-	if !isClusterProviderResponsible(cluster) {
+	} else if !isClusterProviderResponsible(cluster) { // TODO: should be refactored
 		return ctrl.Result{}, fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
