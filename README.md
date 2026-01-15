@@ -111,7 +111,64 @@ kubectl apply -f clusterrequest.yaml
 
 ## 🧑‍💻 Development
 
-### Building the binary locally
+### Quick Setup with Local Development Script
+
+To quickly set up a complete OpenMCP local development environment, use the provided setup script:
+
+```bash
+./hack/local-dev.sh deploy
+```
+
+This script automatically:
+- Creates a KinD cluster with Docker socket access
+- Pulls and loads required Docker images
+- Deploys the OpenMCP operator
+- Installs the cluster provider for kind
+- Deploys service providers (Crossplane, Landscaper, Gateway)
+- Installs Flux2
+- Waits for all components to be ready
+
+You can control which service providers are deployed using environment variables:
+
+```bash
+DEPLOY_SP_CROSSPLANE=false DEPLOY_SP_LANDSCAPER=true ./hack/local-dev.sh deploy
+```
+
+Available deployment control variables (all default to `true`):
+- `DEPLOY_SP_CROSSPLANE` - Deploy Crossplane service provider
+- `DEPLOY_SP_LANDSCAPER` - Deploy Landscaper service provider  
+- `DEPLOY_SP_GATEWAY` - Deploy Gateway platform service
+
+To reset your environment and delete all KinD clusters:
+
+```bash
+./hack/local-dev.sh reset         # Prompts for confirmation
+./hack/local-dev.sh reset --force # Skip confirmation
+```
+For more options:
+
+```bash
+./hack/local-dev.sh help
+```
+
+#### Using Locally Built Images
+
+To test your local changes, you can build the images locally and then use them in the deployment script by overriding the image variables:
+
+```bash
+# Build your local image
+task build:img:build
+
+# Deploy using your local image
+OPENMCP_CP_KIND_IMAGE=ghcr.io/openmcp-project/images/cluster-provider-kind:local ./hack/local-dev.sh deploy
+```
+
+Available image override variables:
+- `OPENMCP_OPERATOR_IMAGE` - Override the OpenMCP operator image
+- `OPENMCP_CP_KIND_IMAGE` - Override the cluster provider kind image
+
+
+### Building and Testing
 
 To build the binary locally, you can use the following command:
 
