@@ -35,8 +35,7 @@ import (
 
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
-
-	ctrlutils "github.com/openmcp-project/controller-utils/pkg/controller"
+	libutils "github.com/openmcp-project/openmcp-operator/lib/utils"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
@@ -47,6 +46,7 @@ var (
 
 // AccessRequestReconciler reconciles a AccessRequest object
 type AccessRequestReconciler struct {
+	ProviderName string
 	client.Client
 	Scheme   *runtime.Scheme
 	Provider kind.Provider
@@ -67,7 +67,10 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, err
 	}
 
-	ar.Status.Phase = clustersv1alpha1.AccessRequestPending // TODO: could be removed?! openmcp-operator might set this value as well
+	if !libutils.IsClusterProviderResponsibleForAccessRequest(ar, r.ProviderName) {
+		log.Info("ClusterProvider is not responsible for this AccessRequest, skipping reconciliation")
+		return ctrl.Result{}, nil
+	}
 
 	defer r.Status().Update(ctx, ar) //nolint:errcheck
 
@@ -155,10 +158,11 @@ func getSecretNamespacedName(ar *clustersv1alpha1.AccessRequest) types.Namespace
 func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	return ctrl.NewControllerManagedBy(mgr).
 		For(&clustersv1alpha1.AccessRequest{}).
-		WithEventFilter(predicate.And(
-			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProviderLabel, "kind"),
-			ctrlutils.HasLabelPredicate(clustersv1alpha1.ProfileLabel, ""),
-		)).
+		WithEventFilter(
+			predicate.NewPredicateFuncs(func(obj client.Object) bool {
+				return libutils.IsClusterProviderResponsibleForAccessRequest(obj.(*clustersv1alpha1.AccessRequest), r.ProviderName)
+			}),
+		).
 		Named("accessrequest").
 		Complete(r)
 }
