@@ -139,6 +139,15 @@ Available deployment control variables (all default to `true`):
 - `DEPLOY_SP_LANDSCAPER` - Deploy Landscaper service provider  
 - `DEPLOY_SP_GATEWAY` - Deploy Gateway platform service
 
+In case [kind fails to load container images from the local docker store](https://github.com/kubernetes-sigs/kind/issues/3795), configure docker's `/etc/docker/daemon.json` as follows:
+```json
+{
+  "features": {
+    "containerd-snapshotter": false
+  }
+}
+```
+
 To reset your environment and delete all KinD clusters:
 
 ```bash
@@ -254,11 +263,11 @@ In order to test that the socket is functional, a simple pod can be deployed:
 apiVersion: v1
 kind: Pod
 metadata:
-  name: ubuntu
+  name: docker-test
 spec:
   containers:
-  - image: ubuntu
-    name: ubuntu
+  - image: docker:29.2.0-cli-alpine3.23
+    name: docker-test
     volumeMounts:
       - mountPath: /var/run/docker.sock
         name: docker
@@ -272,7 +281,7 @@ spec:
         type: Socket
 ```
 
-After installing docker CLI and kind, it should be possible to create a new kind cluster on the level of the host machine: `kind create cluster --name test`
+After installing kind, it should be possible to create a new kind cluster on the level of the host machine: `kind create cluster --name test`
 
 ```
 $ kind create cluster --name test
