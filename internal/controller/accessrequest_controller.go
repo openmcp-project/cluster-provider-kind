@@ -274,9 +274,10 @@ func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clusters
 		return rerr
 	}
 	// remove finalizer - Secret will automatically get deleted because of OwnerReference
-	controllerutil.RemoveFinalizer(ar, Finalizer)
-	if err := r.Update(ctx, ar); err != nil {
-		return errutils.WithReason(fmt.Errorf("error patching finalizer on resource: %w", err), reasonKindClusterInteractionError)
+	if controllerutil.RemoveFinalizer(ar, Finalizer) {
+		if err := r.Update(ctx, ar); err != nil {
+			return errutils.WithReason(fmt.Errorf("error patching finalizer on resource: %w", err), reasonKindClusterInteractionError)
+		}
 	}
 	return nil
 }
