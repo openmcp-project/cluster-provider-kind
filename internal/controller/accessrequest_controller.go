@@ -111,6 +111,10 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		if err := r.Update(ctx, ar); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Return to prevent conflict on subsequent update.
+		// (The update triggers another reconciliation anyway, skipping this block.)
+		return ctrl.Result{}, nil
 	}
 
 	name := kindName(cluster)

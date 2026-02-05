@@ -139,13 +139,18 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv
 //nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
 			return requeue.Error(err)
 		}
+
+		// Return to prevent conflict on subsequent update.
+		// (The update triggers another reconciliation anyway, skipping this block.)
+		return requeue.Never()
 	}
+
+	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
 	if err := r.assignSubnet(ctx, cluster); err != nil {
 		return requeue.Error(err)
