@@ -144,6 +144,7 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		return ctrl.Result{}, fmt.Errorf("failed to create or update secret for access request %q/%q: %w", ar.Namespace, ar.Name, err)
 	}
 
+	ar.Status.ObservedGeneration = ar.Generation
 	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
 	ar.Status.SecretRef = &commonapi.LocalObjectReference{
 		Name: secret.Name,
@@ -154,10 +155,12 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 
 func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest) (ctrl.Result, error) {
 	// remove finalizer - Secret will automatically get deleted because of OwnerReference
-	controllerutil.RemoveFinalizer(ar, Finalizer)
-	if err := r.Update(ctx, ar); err != nil {
-		return ctrl.Result{}, err
+	if controllerutil.RemoveFinalizer(ar, Finalizer) {
+		if err := r.Update(ctx, ar); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
