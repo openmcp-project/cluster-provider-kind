@@ -25,7 +25,7 @@ const (
 
 var (
 	errIPv4NetworkNotFound = errors.New("ipv4 network not found")
-	errUnsupportedNetwork  = errors.New("unsupported network")
+	errUnsupportedNetwork  = errors.New("unsupported network. Subnet mask should be either 8 or 16 out of 32")
 	errNoSubnetsAvailable  = errors.New("no subnets available")
 	errInvalidIP           = errors.New("invalid textual representation of an IP address")
 
