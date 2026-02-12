@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -61,18 +62,13 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 
 	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
 
 	if !libutils.IsClusterProviderResponsibleForAccessRequest(ar, r.ProviderName) {
 		log.Info("ClusterProvider is not responsible for this AccessRequest, skipping reconciliation")
 		return ctrl.Result{}, nil
 	}
-
-	defer r.Status().Update(ctx, ar) //nolint:errcheck
 
 	if ar.Spec.ClusterRef == nil {
 		return ctrl.Result{}, fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name)
@@ -88,12 +84,26 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 		return ctrl.Result{}, fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
-	// handle deletion
-	if !ar.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, ar)
+	prevStatus := ar.DeepCopy().Status
+
+	var result ctrl.Result
+	var err error
+
+	if ar.DeletionTimestamp.IsZero() {
+		result, err = r.handleCreateOrUpdate(ctx, ar, cluster)
+	} else {
+		result, err = r.handleDelete(ctx, ar)
 	}
 
-	return r.handleCreateOrUpdate(ctx, ar, cluster)
+	if err != nil {
+		return result, err
+	}
+
+	if !equality.Semantic.DeepEqual(prevStatus, ar.Status) {
+		return result, r.Status().Update(ctx, ar)
+	}
+
+	return result, nil
 }
 
 func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
@@ -101,6 +111,10 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		if err := r.Update(ctx, ar); err != nil {
 			return ctrl.Result{}, err
 		}
+
+		// Return to prevent conflict on subsequent update.
+		// (The update triggers another reconciliation anyway, skipping this block.)
+		return ctrl.Result{}, nil
 	}
 
 	name := kindName(cluster)
@@ -130,6 +144,7 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		return ctrl.Result{}, fmt.Errorf("failed to create or update secret for access request %q/%q: %w", ar.Namespace, ar.Name, err)
 	}
 
+	ar.Status.ObservedGeneration = ar.Generation
 	ar.Status.Phase = clustersv1alpha1.AccessRequestGranted
 	ar.Status.SecretRef = &commonapi.LocalObjectReference{
 		Name: secret.Name,
@@ -140,10 +155,12 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 
 func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest) (ctrl.Result, error) {
 	// remove finalizer - Secret will automatically get deleted because of OwnerReference
-	controllerutil.RemoveFinalizer(ar, Finalizer)
-	if err := r.Update(ctx, ar); err != nil {
-		return ctrl.Result{}, err
+	if controllerutil.RemoveFinalizer(ar, Finalizer) {
+		if err := r.Update(ctx, ar); err != nil {
+			return ctrl.Result{}, err
+		}
 	}
+
 	return ctrl.Result{}, nil
 }
 
