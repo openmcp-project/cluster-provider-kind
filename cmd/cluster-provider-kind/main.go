@@ -261,6 +261,14 @@ func main() {
 
 	kindProvider := kind.NewKindProvider()
 
+	accessRequestServiceAccountNamespace := os.Getenv("ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE")
+	if accessRequestServiceAccountNamespace == "" {
+		accessRequestServiceAccountNamespace = "accessrequests"
+	}
+	controller.SetAccessRequestServiceAccountNamespace(accessRequestServiceAccountNamespace)
+	controller.SetProviderName(providerName)
+	controller.SetEnvironment(environment)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
