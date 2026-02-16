@@ -69,12 +69,36 @@ var (
 	defaultRequestedTokenValidityDuration = 30 * 24 * time.Hour // 30 days
 )
 
+// ClientProvider creates a client to connect to the cluster that the AccessRequest belongs to
+type ClientProvider interface {
+	CreateClient(kubeconfig string) (client.Client, *rest.Config, error)
+}
+
+// DefaultClientProvider creates a client for production use
+var DefaultClientProvider ClientProvider = clientProviderImpl{}
+
+type clientProviderImpl struct{}
+
+// CreateClient implements [ClientProvider].
+func (c clientProviderImpl) CreateClient(kubeconfig string) (client.Client, *rest.Config, error) {
+	restCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfig))
+	if err != nil {
+		return nil, nil, err
+	}
+	cl, err := client.New(restCfg, client.Options{})
+	if err != nil {
+		return nil, nil, err
+	}
+	return cl, restCfg, nil
+}
+
 // AccessRequestReconciler reconciles a AccessRequest object
 type AccessRequestReconciler struct {
 	ProviderName string
 	client.Client
-	Scheme   *runtime.Scheme
-	Provider kind.Provider
+	Scheme          *runtime.Scheme
+	ClusterProvider kind.Provider
+	ClientProvider  ClientProvider
 }
 
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
@@ -129,18 +153,12 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 	}
 
 	name := kindName(cluster)
-	kubeconfigStr, err := r.Provider.KubeConfig(name, false)
+	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
 	// kubeconfigStr, err := r.Provider.KubeConfig(name, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	restCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfigStr))
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	cl, err := client.New(restCfg, client.Options{})
+	cl, restCfg, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -168,7 +186,7 @@ func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clusters
 	}
 	name := kindName(cluster)
 	// kubeconfigStr, err := r.Provider.KubeConfig(name, false)
-	kubeconfigStr, err := r.Provider.KubeConfig(name, true)
+	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
@@ -379,7 +397,8 @@ func (r *AccessRequestReconciler) cleanupServiceAccounts(ctx context.Context, c 
 	for _, sa := range sas.Items {
 		keepThis := false
 		for _, k := range keep {
-			if k.GetName() == sa.Name && k.GetNamespace() == sa.Namespace && k.GetObjectKind().GroupVersionKind().Kind == "ServiceAccount" {
+			_, isServiceAccount := k.(*corev1.ServiceAccount)
+			if k.GetName() == sa.Name && k.GetNamespace() == sa.Namespace && isServiceAccount {
 				log.Debug("Keeping ServiceAccount", "resourceName", sa.Name, "resourceNamespace", sa.Namespace)
 				keepThis = true
 				break

@@ -303,10 +303,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.AccessRequestReconciler{
-		ProviderName: providerName,
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Provider:     kindProvider,
+		ProviderName:    providerName,
+		Client:          mgr.GetClient(),
+		Scheme:          mgr.GetScheme(),
+		ClusterProvider: kindProvider,
+		ClientProvider:  controller.DefaultClientProvider,
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AccessRequest")
 		os.Exit(1)
