@@ -2,6 +2,7 @@ package controller
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -29,6 +30,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	SetAccessRequestServiceAccountNamespace("accessrequest")
 	SetEnvironment("unit-test")
 	SetProviderName(providerName)
+	kindClusterRole := "ClusterRole"
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
@@ -76,7 +78,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 								Kind: kindClusterRole,
 							},
 							{
-								Name:      "existing-test-role",
+								Name:      "existing-role",
 								Namespace: "existing-test",
 								Kind:      kindRole,
 							},
@@ -138,6 +140,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			expectedRules := exampleRules()
 
 			// assert service account exists for this access request
+			saList := &corev1.ServiceAccountList{}
+			err := fakeClusterClient.client.List(context.TODO(), saList)
+			assert.NoError(t, err)
+			assert.Len(t, saList.Items, 1)
+			sa := saList.Items[0]
+			assert.Equal(t, accessRequestServiceAccountNamespace, sa.GetNamespace())
 
 			// assert cluster role exists and has expected rules
 			clusterRole := &rbacv1.ClusterRole{
@@ -145,7 +153,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Name: "test-cluster-role",
 				},
 			}
-			err := fakeClusterClient.client.Get(context.TODO(), client.ObjectKeyFromObject(clusterRole), clusterRole)
+			err = fakeClusterClient.client.Get(context.TODO(), client.ObjectKeyFromObject(clusterRole), clusterRole)
 			assert.NoError(t, err)
 			assert.Len(t, clusterRole.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, clusterRole.Rules)
@@ -163,16 +171,52 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.ElementsMatch(t, expectedRules, role.Rules)
 
 			// assert cluster role binding exists
-			crb := &rbacv1.ClusterRoleBindingList{}
-			err = fakeClusterClient.client.List(context.TODO(), crb)
+			crbList := &rbacv1.ClusterRoleBindingList{}
+			err = fakeClusterClient.client.List(context.TODO(), crbList)
 			assert.NoError(t, err)
+			// expected: one for the new and one for the 'existing' cluster role
+			assert.Len(t, crbList.Items, 2)
+			// assert reference to service account
+			expectedRoleRefs := []string{"test-cluster-role", "existing-cluster-role"}
+			for _, crb := range crbList.Items {
+				assert.Contains(t, expectedRoleRefs, crb.RoleRef.Name)
+				for _, sub := range crb.Subjects {
+					assert.Equal(t, sa.Name, sub.Name)
+					assert.Equal(t, sa.Namespace, sub.Namespace)
+					assert.Equal(t, "ServiceAccount", sub.Kind)
+				}
+			}
 
 			// assert role binding exists
+			rbList := &rbacv1.RoleBindingList{}
+			err = fakeClusterClient.client.List(context.TODO(), rbList)
+			assert.NoError(t, err)
+			// expected: one for the new and one for the 'existing' cluster role
+			assert.Len(t, rbList.Items, 2)
+			// assert reference to service account
+			expectedRoleRefs = []string{"test-role", "existing-role"}
+			for _, rb := range rbList.Items {
+				assert.Contains(t, expectedRoleRefs, rb.RoleRef.Name)
+				for _, sub := range rb.Subjects {
+					assert.Equal(t, sa.Name, sub.Name)
+					assert.Equal(t, sa.Namespace, sub.Namespace)
+					assert.Equal(t, "ServiceAccount", sub.Kind)
+				}
+			}
 
 			// assert kubeconfig secret exists
-			secretList := corev1.SecretList{}
-			err = r.List(context.Background(), &secretList)
+			seList := &corev1.SecretList{}
+			r.List(context.TODO(), seList)
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s.kubeconfig", tt.req.Name),
+					Namespace: tt.req.Namespace,
+				},
+			}
+			err = r.Get(context.Background(), client.ObjectKeyFromObject(secret), secret)
 			assert.NoError(t, err)
+			_, exists := secret.StringData["kubeconfig"]
+			assert.True(t, exists)
 		})
 	}
 }

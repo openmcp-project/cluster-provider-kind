@@ -57,9 +57,6 @@ const (
 	managedByNameLabel                  = groupName + "/managed-by-name"
 	managedByNamespaceLabel             = groupName + "/managed-by-namespace"
 	kindRole                            = "Role"
-	kindClusterRole                     = "ClusterRole"
-	kindRoleBinding                     = "RoleBinding"
-	kindClusterRoleBinding              = "ClusterRoleBinding"
 	reasonKindClusterInteractionProblem = "KindClusterInteractionProblem"
 	reasonInternalError                 = "InternalError"
 )
@@ -261,7 +258,8 @@ func (r *AccessRequestReconciler) cleanupRoleBindings(ctx context.Context, c cli
 	for _, rb := range rbs.Items {
 		keepThis := false
 		for _, k := range keep {
-			if k.GetName() == rb.Name && k.GetNamespace() == rb.Namespace && k.GetObjectKind().GroupVersionKind().Kind == kindRoleBinding {
+			_, isRoleBinding := k.(*rbacv1.RoleBinding)
+			if k.GetName() == rb.Name && k.GetNamespace() == rb.Namespace && isRoleBinding {
 				log.Debug("Keeping RoleBinding", "resourceName", rb.Name, "resourceNamespace", rb.Namespace)
 				keepThis = true
 				break
@@ -295,7 +293,8 @@ func (r *AccessRequestReconciler) cleanupClusterRoleBindings(ctx context.Context
 	for _, crb := range crbs.Items {
 		keepThis := false
 		for _, k := range keep {
-			if k.GetName() == crb.Name && k.GetObjectKind().GroupVersionKind().Kind == kindClusterRoleBinding {
+			_, isClusterRoleBinding := k.(*rbacv1.ClusterRoleBinding)
+			if k.GetName() == crb.Name && isClusterRoleBinding {
 				log.Debug("Keeping ClusterRoleBinding", "resourceName", crb.Name)
 				keepThis = true
 				break
@@ -329,7 +328,8 @@ func (r *AccessRequestReconciler) cleanupRoles(ctx context.Context, c client.Cli
 	for _, role := range roles.Items {
 		keepThis := false
 		for _, k := range keep {
-			if k.GetName() == role.Name && k.GetNamespace() == role.Namespace && k.GetObjectKind().GroupVersionKind().Kind == kindRole {
+			_, isRole := k.(*rbacv1.Role)
+			if k.GetName() == role.Name && k.GetNamespace() == role.Namespace && isRole {
 				log.Debug("Keeping Role", "resourceName", role.Name, "resourceNamespace", role.Namespace)
 				keepThis = true
 				break
@@ -363,7 +363,8 @@ func (r *AccessRequestReconciler) cleanupClusterRoles(ctx context.Context, c cli
 	for _, cr := range crs.Items {
 		keepThis := false
 		for _, k := range keep {
-			if k.GetName() == cr.Name && k.GetObjectKind().GroupVersionKind().Kind == kindClusterRole {
+			_, isClusterRole := k.(*rbacv1.ClusterRole)
+			if k.GetName() == cr.Name && isClusterRole {
 				log.Debug("Keeping ClusterRole", "resourceName", cr.Name)
 				keepThis = true
 				break
@@ -445,9 +446,6 @@ func (r *AccessRequestReconciler) renewToken(ctx context.Context, c client.Clien
 	if err != nil {
 		return nil, err
 	}
-	if sa.GroupVersionKind().Kind == "" {
-		sa.SetGroupVersionKind(corev1.SchemeGroupVersion.WithKind("ServiceAccount"))
-	}
 
 	permissions, err := reconcilePermissions(ctx, c, sa, ar)
 	if err != nil {
@@ -518,14 +516,7 @@ func reconcilePermissions(ctx context.Context, c client.Client, sa *corev1.Servi
 				log.Error(err, "error ensuring role")
 				continue
 			}
-			if rb.GroupVersionKind().Kind == "" {
-				rb.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindRoleBinding))
-			}
-			keep = append(keep, rb)
-			if r.GroupVersionKind().Kind == "" {
-				r.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindRole))
-			}
-			keep = append(keep, r)
+			keep = append(keep, r, rb)
 		} else {
 			// ensure cluster role + binding
 			log.Debug("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
@@ -534,14 +525,7 @@ func reconcilePermissions(ctx context.Context, c client.Client, sa *corev1.Servi
 				log.Error(err, "error ensuring cluster role")
 				continue
 			}
-			if crb.GroupVersionKind().Kind == "" {
-				crb.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindClusterRoleBinding))
-			}
-			keep = append(keep, crb)
-			if cr.GroupVersionKind().Kind == "" {
-				cr.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindClusterRole))
-			}
-			keep = append(keep, cr)
+			keep = append(keep, cr, crb)
 		}
 	}
 	return keep, nil
@@ -560,18 +544,12 @@ func reconcileRoles(ctx context.Context, c client.Client, sa *corev1.ServiceAcco
 			if err != nil {
 				return nil, err
 			}
-			if rb.GroupVersionKind().Kind == "" {
-				rb.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindRoleBinding))
-			}
 			keep = append(keep, rb)
 		} else {
 			// ClusterRole
 			crb, err := clusteraccess.EnsureClusterRoleBinding(ctx, c, roleBindingName, roleRef.Name, subjects, expectedLabels...)
 			if err != nil {
 				return nil, err
-			}
-			if crb.GroupVersionKind().Kind == "" {
-				crb.SetGroupVersionKind(rbacv1.SchemeGroupVersion.WithKind(kindClusterRoleBinding))
 			}
 			keep = append(keep, crb)
 		}
