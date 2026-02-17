@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	rbacv1 "k8s.io/api/rbac/v1"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
@@ -40,7 +39,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 		wantErr bool
 	}{
 		{
-			name: "test",
+			name: "test create and delete",
 			req: ctrl.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: "test",
@@ -100,9 +99,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			scheme := runtime.NewScheme()
 			_ = clientgoscheme.AddToScheme(scheme)
-			_ = apiextv1.AddToScheme(scheme)
 			_ = clustersv1alpha1.AddToScheme(scheme)
-			_ = corev1.AddToScheme(scheme)
 			fakeCluster := clustersv1alpha1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "fakeCluster",
@@ -125,7 +122,8 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				ClusterProvider: fakeKindProvider{},
 				ClientProvider:  fakeClusterClient,
 			}
-			got, gotErr := r.Reconcile(ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true))), tt.req)
+			ctx := ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true)))
+			got, gotErr := r.Reconcile(ctx, tt.req)
 			if gotErr != nil {
 				if !tt.wantErr {
 					t.Errorf("Reconcile() failed: %v", gotErr)
@@ -141,7 +139,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 
 			// assert service account exists for this access request
 			saList := &corev1.ServiceAccountList{}
-			err := fakeClusterClient.client.List(context.TODO(), saList)
+			err := fakeClusterClient.client.List(ctx, saList)
 			assert.NoError(t, err)
 			assert.Len(t, saList.Items, 1)
 			sa := saList.Items[0]
@@ -153,7 +151,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Name: "test-cluster-role",
 				},
 			}
-			err = fakeClusterClient.client.Get(context.TODO(), client.ObjectKeyFromObject(clusterRole), clusterRole)
+			err = fakeClusterClient.client.Get(ctx, client.ObjectKeyFromObject(clusterRole), clusterRole)
 			assert.NoError(t, err)
 			assert.Len(t, clusterRole.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, clusterRole.Rules)
@@ -165,14 +163,14 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Namespace: "test",
 				},
 			}
-			err = fakeClusterClient.client.Get(context.TODO(), client.ObjectKeyFromObject(role), role)
+			err = fakeClusterClient.client.Get(ctx, client.ObjectKeyFromObject(role), role)
 			assert.NoError(t, err)
 			assert.Len(t, role.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, role.Rules)
 
 			// assert cluster role binding exists
 			crbList := &rbacv1.ClusterRoleBindingList{}
-			err = fakeClusterClient.client.List(context.TODO(), crbList)
+			err = fakeClusterClient.client.List(ctx, crbList)
 			assert.NoError(t, err)
 			// expected: one for the new and one for the 'existing' cluster role
 			assert.Len(t, crbList.Items, 2)
@@ -189,7 +187,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 
 			// assert role binding exists
 			rbList := &rbacv1.RoleBindingList{}
-			err = fakeClusterClient.client.List(context.TODO(), rbList)
+			err = fakeClusterClient.client.List(ctx, rbList)
 			assert.NoError(t, err)
 			// expected: one for the new and one for the 'existing' cluster role
 			assert.Len(t, rbList.Items, 2)
@@ -206,17 +204,56 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 
 			// assert kubeconfig secret exists
 			seList := &corev1.SecretList{}
-			r.List(context.TODO(), seList)
+			r.List(ctx, seList)
 			secret := &corev1.Secret{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      fmt.Sprintf("%s.kubeconfig", tt.req.Name),
 					Namespace: tt.req.Namespace,
 				},
 			}
-			err = r.Get(context.Background(), client.ObjectKeyFromObject(secret), secret)
+			err = r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
 			assert.NoError(t, err)
 			_, exists := secret.StringData["kubeconfig"]
 			assert.True(t, exists)
+			ownerSet := secret.OwnerReferences[0].Controller
+			assert.True(t, *ownerSet)
+
+			// delete AR
+			obj := tt.ar.DeepCopy()
+			obj.SetGroupVersionKind(clustersv1alpha1.GroupVersion.WithKind("AccessRequest"))
+			err = r.Delete(ctx, obj)
+			assert.NoError(t, err)
+			got, err = r.Reconcile(ctx, tt.req)
+			assert.NoError(t, err)
+
+			// assert cleanup
+
+			// service account
+			err = fakeClusterClient.client.List(ctx, saList)
+			assert.NoError(t, err)
+			assert.Len(t, saList.Items, 0)
+
+			// roles
+			crList := &rbacv1.ClusterRoleList{}
+			err = fakeClusterClient.client.List(ctx, crList)
+			assert.NoError(t, err)
+			assert.Len(t, crList.Items, 0)
+
+			rList := &rbacv1.RoleList{}
+			err = fakeClusterClient.client.List(ctx, rList)
+			assert.NoError(t, err)
+			assert.Len(t, rList.Items, 0)
+
+			// bindings
+			err = fakeClusterClient.client.List(ctx, crbList)
+			assert.NoError(t, err)
+			assert.Len(t, crbList.Items, 0)
+
+			err = fakeClusterClient.client.List(ctx, rbList)
+			assert.NoError(t, err)
+			assert.Len(t, rbList.Items, 0)
+
+			// note that the secret will get garbage collected with the owner reference
 		})
 	}
 }

@@ -187,17 +187,10 @@ func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clusters
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	restCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfigStr))
+	cl, _, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
-
-	cl, err := client.New(restCfg, client.Options{})
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
 	if rerr := r.cleanupResources(ctx, cl, nil, managedResourcesLabels(ar)); rerr != nil {
 		return ctrl.Result{}, rerr
 	}
