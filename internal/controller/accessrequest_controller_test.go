@@ -22,6 +22,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 func TestAccessRequestReconciler_Reconcile(t *testing.T) {
@@ -116,8 +117,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				restConfig: &rest.Config{},
 			}
 			r := AccessRequestReconciler{
-				ProviderName:    providerName,
-				Client:          fake.NewClientBuilder().WithScheme(scheme).WithObjects(&tt.ar, &fakeCluster).Build(),
+				ProviderName: providerName,
+				Client: fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(&tt.ar, &fakeCluster).
+					WithStatusSubresource(&clustersv1alpha1.AccessRequest{}).
+					Build(),
 				Scheme:          scheme,
 				ClusterProvider: fakeKindProvider{},
 				ClientProvider:  fakeClusterClient,
@@ -218,6 +223,18 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			ownerSet := secret.OwnerReferences[0].Controller
 			assert.True(t, *ownerSet)
 
+			// assert AR status
+			ar := &clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.ar.Name,
+					Namespace: tt.ar.Namespace,
+				},
+			}
+			err = r.Get(ctx, client.ObjectKeyFromObject(ar), ar)
+			assert.NoError(t, err)
+			assert.Equal(t, clustersv1alpha1.REQUEST_GRANTED, ar.Status.Phase)
+			assert.Equal(t, secret.Name, ar.Status.SecretRef.Name)
+
 			// delete AR
 			obj := tt.ar.DeepCopy()
 			obj.SetGroupVersionKind(clustersv1alpha1.GroupVersion.WithKind("AccessRequest"))
@@ -228,12 +245,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 
 			// assert cleanup
 
-			// service account
+			// service account has been removed
 			err = fakeClusterClient.client.List(ctx, saList)
 			assert.NoError(t, err)
 			assert.Len(t, saList.Items, 0)
 
-			// roles
+			// roles have been removed
 			crList := &rbacv1.ClusterRoleList{}
 			err = fakeClusterClient.client.List(ctx, crList)
 			assert.NoError(t, err)
@@ -244,7 +261,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, rList.Items, 0)
 
-			// bindings
+			// bindings have been removed
 			err = fakeClusterClient.client.List(ctx, crbList)
 			assert.NoError(t, err)
 			assert.Len(t, crbList.Items, 0)
@@ -253,7 +270,11 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.NoError(t, err)
 			assert.Len(t, rbList.Items, 0)
 
-			// note that the secret will get garbage collected with the owner reference
+			// secret will get garbage collected via owner reference
+
+			// AR has been removed
+			err = r.Get(ctx, client.ObjectKeyFromObject(ar), ar)
+			assert.True(t, apierrors.IsNotFound(err))
 		})
 	}
 }

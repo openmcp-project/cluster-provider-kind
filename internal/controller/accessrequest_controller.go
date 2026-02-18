@@ -150,11 +150,12 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 	}
 
 	name := kindName(cluster)
+
 	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
-	// kubeconfigStr, err := r.Provider.KubeConfig(name, true)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	cl, restCfg, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
 		return ctrl.Result{}, err
@@ -182,15 +183,17 @@ func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clusters
 		return ctrl.Result{}, err
 	}
 	name := kindName(cluster)
-	// kubeconfigStr, err := r.Provider.KubeConfig(name, false)
-	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, true)
+
+	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	cl, _, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+
 	if rerr := r.cleanupResources(ctx, cl, nil, managedResourcesLabels(ar)); rerr != nil {
 		return ctrl.Result{}, rerr
 	}
