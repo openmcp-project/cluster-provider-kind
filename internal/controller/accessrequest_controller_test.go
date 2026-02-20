@@ -22,8 +22,9 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
-	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+
+	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
 func TestAccessRequestReconciler_Reconcile(t *testing.T) {
