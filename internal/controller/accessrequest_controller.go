@@ -32,7 +32,9 @@ import (
 	rbacv1 "k8s.io/api/rbac/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
@@ -63,7 +65,7 @@ const (
 
 	reasonKindClusterInteractionError = "KindClusterInteractionError"
 	reasonInternalError               = "InternalError"
-	reasonInvalidReference            = "InvalidReferenceError"
+	reasonInvalidReference            = "InvalidReference"
 	reasonOIDCRequest                 = "OIDCBasedAccessRequest"
 	reasonNotResponsible              = "NotResponsible"
 )
@@ -195,8 +197,8 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, clus
 		rr.ReconcileError = errutils.WithReason(errNotSupported, reasonOIDCRequest)
 		return
 	}
-	if ar.Spec.Token != nil && requiresTokenRefresh(ctx, cl, rr) {
-		keep := r.requestToken(ctx, cl, restCfg, rr)
+	if ar.Spec.Token != nil && tokenRefreshRequired(ctx, cl, rr) {
+		keep := r.reconcileTokenAccess(ctx, cl, restCfg, rr)
 		if rr.ReconcileError != nil {
 			return
 		}
@@ -250,145 +252,64 @@ func (r *AccessRequestReconciler) cleanupResources(ctx context.Context, c client
 	}
 	selector := client.MatchingLabels(labels)
 
-	if err := r.cleanupRoleBindings(ctx, c, selector, keep); err != nil {
-		return err
+	rbgvk := rbacv1.SchemeGroupVersion.WithKind("RoleBindingList")
+	rgvk := rbacv1.SchemeGroupVersion.WithKind("RoleList")
+	crbgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBindingList")
+	crgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleList")
+	sagvk := corev1.SchemeGroupVersion.WithKind("ServiceAccountList")
+
+	resourceCleaners := []resourceCleaner{
+		newResrouceCleaner[*rbacv1.RoleBinding](c, rbgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.Role](c, rgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.ClusterRoleBinding](c, crbgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.ClusterRole](c, crgvk, selector, keep),
+		newResrouceCleaner[*corev1.ServiceAccount](c, sagvk, selector, keep),
 	}
-	if err := r.cleanupClusterRoleBindings(ctx, c, selector, keep); err != nil {
-		return err
-	}
-	if err := r.cleanupRoles(ctx, c, selector, keep); err != nil {
-		return err
-	}
-	if err := r.cleanupClusterRoles(ctx, c, selector, keep); err != nil {
-		return err
-	}
-	if err := r.cleanupServiceAccounts(ctx, c, selector, keep); err != nil {
-		return err
+	for _, cleaner := range resourceCleaners {
+		if err := cleaner.cleanup(ctx); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-func (r *AccessRequestReconciler) cleanupRoleBindings(ctx context.Context, c client.Client, selector client.MatchingLabels, keep []client.Object) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up RoleBindings")
-
-	errs := errutils.NewReasonableErrorList()
-	rbs := &rbacv1.RoleBindingList{}
-	if err := c.List(ctx, rbs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing RoleBindings: %w", err), reasonKindClusterInteractionError))
-		return errs.Aggregate()
-	}
-	for _, rb := range rbs.Items {
-		keepThis := false
-		for _, k := range keep {
-			_, isRoleBinding := k.(*rbacv1.RoleBinding)
-			if k.GetName() == rb.Name && k.GetNamespace() == rb.Namespace && isRoleBinding {
-				log.Debug("Keeping RoleBinding", "resourceName", rb.Name, "resourceNamespace", rb.Namespace)
-				keepThis = true
-				break
-			}
-		}
-		if keepThis {
-			continue
-		}
-		log.Debug("Deleting RoleBinding", "resourceName", rb.Name, "resourceNamespace", rb.Namespace)
-		if err := c.Delete(ctx, &rb); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Debug("RoleBinding not found", "resourceName", rb.Name, "resourceNamespace", rb.Namespace)
-			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting RoleBinding '%s/%s': %w", rb.Namespace, rb.Name, err), reasonKindClusterInteractionError))
-			}
-		}
-	}
-	return errs.Aggregate()
+type resourceCleaner interface {
+	cleanup(ctx context.Context) errutils.ReasonableError
 }
 
-func (r *AccessRequestReconciler) cleanupClusterRoleBindings(ctx context.Context, c client.Client, selector client.MatchingLabels, keep []client.Object) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up ClusterRoleBindings")
-
-	errs := errutils.NewReasonableErrorList()
-	crbs := &rbacv1.ClusterRoleBindingList{}
-	if err := c.List(ctx, crbs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoleBindings: %w", err), reasonKindClusterInteractionError))
-		return errs.Aggregate()
-	}
-	for _, crb := range crbs.Items {
-		keepThis := false
-		for _, k := range keep {
-			_, isClusterRoleBinding := k.(*rbacv1.ClusterRoleBinding)
-			if k.GetName() == crb.Name && isClusterRoleBinding {
-				log.Debug("Keeping ClusterRoleBinding", "resourceName", crb.Name)
-				keepThis = true
-				break
-			}
-		}
-		if keepThis {
-			continue
-		}
-		log.Debug("Deleting ClusterRoleBinding", "resourceName", crb.Name)
-		if err := c.Delete(ctx, &crb); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Debug("ClusterRoleBinding not found", "resourceName", crb.Name)
-			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRoleBinding '%s': %w", crb.Name, err), reasonKindClusterInteractionError))
-			}
-		}
-	}
-	return errs.Aggregate()
+type resourceCleanerImpl[T client.Object] struct {
+	c        client.Client
+	selector client.MatchingLabels
+	keep     []client.Object
+	ulist    *unstructured.UnstructuredList
 }
 
-func (r *AccessRequestReconciler) cleanupRoles(ctx context.Context, c client.Client, selector client.MatchingLabels, keep []client.Object) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up Roles")
-
-	errs := errutils.NewReasonableErrorList()
-	roles := &rbacv1.RoleList{}
-	if err := c.List(ctx, roles, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing Roles: %w", err), reasonKindClusterInteractionError))
-		return errs.Aggregate()
+func newResrouceCleaner[T client.Object](c client.Client, gvk schema.GroupVersionKind, selector client.MatchingLabels, keep []client.Object) resourceCleanerImpl[T] {
+	list := unstructured.UnstructuredList{}
+	list.SetGroupVersionKind(gvk)
+	return resourceCleanerImpl[T]{
+		c:        c,
+		selector: selector,
+		keep:     keep,
+		ulist:    &list,
 	}
-	for _, role := range roles.Items {
-		keepThis := false
-		for _, k := range keep {
-			_, isRole := k.(*rbacv1.Role)
-			if k.GetName() == role.Name && k.GetNamespace() == role.Namespace && isRole {
-				log.Debug("Keeping Role", "resourceName", role.Name, "resourceNamespace", role.Namespace)
-				keepThis = true
-				break
-			}
-		}
-		if keepThis {
-			continue
-		}
-		log.Debug("Deleting Role", "resourceName", role.Name, "resourceNamespace", role.Namespace)
-		if err := c.Delete(ctx, &role); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Debug("Role not found", "resourceName", role.Name, "resourceNamespace", role.Namespace)
-			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting Role '%s/%s': %w", role.Namespace, role.Name, err), reasonKindClusterInteractionError))
-			}
-		}
-	}
-	return errs.Aggregate()
 }
 
-func (r *AccessRequestReconciler) cleanupClusterRoles(ctx context.Context, c client.Client, selector client.MatchingLabels, keep []client.Object) errutils.ReasonableError {
+func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.ReasonableError {
 	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up ClusterRoles")
-
+	log.Debug("Cleaning up", "kind", r.ulist.GetKind())
 	errs := errutils.NewReasonableErrorList()
-	crs := &rbacv1.ClusterRoleList{}
-	if err := c.List(ctx, crs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoles: %w", err), reasonKindClusterInteractionError))
+
+	if err := r.c.List(ctx, r.ulist, r.selector); err != nil {
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing (%s): %w", r.ulist.GetKind(), err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
-	for _, cr := range crs.Items {
+	for _, item := range r.ulist.Items {
 		keepThis := false
-		for _, k := range keep {
-			_, isClusterRole := k.(*rbacv1.ClusterRole)
-			if k.GetName() == cr.Name && isClusterRole {
-				log.Debug("Keeping ClusterRole", "resourceName", cr.Name)
+		for _, k := range r.keep {
+			_, isType := k.(T)
+			if k.GetName() == item.GetName() && k.GetNamespace() == item.GetNamespace() && isType {
+				log.Debug("Keeping object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 				keepThis = true
 				break
 			}
@@ -396,50 +317,16 @@ func (r *AccessRequestReconciler) cleanupClusterRoles(ctx context.Context, c cli
 		if keepThis {
 			continue
 		}
-		log.Debug("Deleting ClusterRole", "resourceName", cr.Name)
-		if err := c.Delete(ctx, &cr); err != nil {
+		log.Debug("Deleting object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+		if err := r.c.Delete(ctx, &item); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Debug("ClusterRole not found", "resourceName", cr.Name)
+				log.Debug("object not found", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRole '%s': %w", cr.Name, err), reasonKindClusterInteractionError))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting object (%s) '%s/%s': %w", item.GetKind(), item.GetNamespace(), item.GetName(), err), reasonKindClusterInteractionError))
 			}
 		}
 	}
-	return errs.Aggregate()
-}
 
-func (r *AccessRequestReconciler) cleanupServiceAccounts(ctx context.Context, c client.Client, selector client.MatchingLabels, keep []client.Object) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up ServiceAccounts")
-
-	errs := errutils.NewReasonableErrorList()
-	sas := &corev1.ServiceAccountList{}
-	if err := c.List(ctx, sas, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ServiceAccounts: %w", err), reasonKindClusterInteractionError))
-		return errs.Aggregate()
-	}
-	for _, sa := range sas.Items {
-		keepThis := false
-		for _, k := range keep {
-			_, isServiceAccount := k.(*corev1.ServiceAccount)
-			if k.GetName() == sa.Name && k.GetNamespace() == sa.Namespace && isServiceAccount {
-				log.Debug("Keeping ServiceAccount", "resourceName", sa.Name, "resourceNamespace", sa.Namespace)
-				keepThis = true
-				break
-			}
-		}
-		if keepThis {
-			continue
-		}
-		log.Debug("Deleting ServiceAccount", "resourceName", sa.Name, "resourceNamespace", sa.Namespace)
-		if err := c.Delete(ctx, &sa); err != nil {
-			if apierrors.IsNotFound(err) {
-				log.Debug("ServiceAccount not found", "resourceName", sa.Name, "resourceNamespace", sa.Namespace)
-			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ServiceAccount '%s/%s': %w", sa.Namespace, sa.Name, err), reasonKindClusterInteractionError))
-			}
-		}
-	}
 	return errs.Aggregate()
 }
 
@@ -450,15 +337,12 @@ func managedResourcesLabels(ac *clustersv1alpha1.AccessRequest) map[string]strin
 	}
 }
 
-// requestToken creates a service account token that reflects the requested cluster access
+// reconcileTokenAccess creates a service account token that reflects the requested cluster access
 // this includes reconciliation of the service account, the related (cluster) roles and (cluster) bindings in the cluster the access request is for
 // and eventually creating a corresponding secret that holds the prepared kubeconfig in the platform cluster
-func (r *AccessRequestReconciler) requestToken(ctx context.Context, c client.Client, cfg *rest.Config, rr *reconcileResult) []client.Object {
+func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c client.Client, cfg *rest.Config, rr *reconcileResult) []client.Object {
 	log := logging.FromContextOrPanic(ctx)
-	log.Info("Refresh service account token if required")
-
-	ar := rr.Object
-	// check if the secret exists and is valid
+	log.Info("reconcile token access")
 
 	// ensure namespace
 	_, err := clusteraccess.EnsureNamespace(ctx, c, AccessRequestServiceAccountNamespace())
@@ -467,6 +351,7 @@ func (r *AccessRequestReconciler) requestToken(ctx context.Context, c client.Cli
 		return nil
 	}
 
+	ar := rr.Object
 	// ensure service account
 	name := ctrlutils.K8sNameUUIDUnsafe(Environment(), ProviderName(), ar.Namespace, ar.Name)
 	sa, err := clusteraccess.EnsureServiceAccount(ctx, c, name, AccessRequestServiceAccountNamespace(), pairs.MapToPairs(managedResourcesLabels(ar))...)
@@ -480,7 +365,7 @@ func (r *AccessRequestReconciler) requestToken(ctx context.Context, c client.Cli
 		rr.ReconcileError = err
 		return nil
 	}
-	bindObjs, errlist := reconcileBindingToExistingRoles(ctx, c, sa, ar)
+	bindObjs, errlist := reconcileRequestedRoleBindings(ctx, c, sa, ar)
 	if err := errlist.Aggregate(); err != nil {
 		rr.ReconcileError = err
 		return nil
@@ -566,7 +451,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 	return keep, *errlist
 }
 
-func reconcileBindingToExistingRoles(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
+func reconcileRequestedRoleBindings(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
 	keep := []client.Object{}
 	errlist := errutils.NewReasonableErrorList()
 	expectedLabels := pairs.MapToPairs(managedResourcesLabels(ar))
@@ -600,7 +485,7 @@ func defaultSecretName(ar *clustersv1alpha1.AccessRequest) string {
 	return ctrlutils.ShortenToXCharactersUnsafe(ar.Name, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
 }
 
-func requiresTokenRefresh(ctx context.Context, c client.Client, rr *reconcileResult) bool {
+func tokenRefreshRequired(ctx context.Context, c client.Client, rr *reconcileResult) bool {
 	ar := rr.Object
 	if ar.Status.Phase != clustersv1alpha1.REQUEST_GRANTED {
 		return true
