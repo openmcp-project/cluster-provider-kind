@@ -4,7 +4,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
+	"strconv"
 	"testing"
+	"time"
 
 	controllerutilserrors "github.com/openmcp-project/controller-utils/pkg/errors"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
@@ -27,6 +30,11 @@ import (
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
+const (
+	reqName      = "test"
+	reqNamespace = "default"
+)
+
 func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	providerName := "kind"
 	SetAccessRequestServiceAccountNamespace("accessrequest")
@@ -36,109 +44,73 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	scheme := runtime.NewScheme()
 	_ = clientgoscheme.AddToScheme(scheme)
 	_ = clustersv1alpha1.AddToScheme(scheme)
+
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		req                    ctrl.Request
-		ar                     clustersv1alpha1.AccessRequest
-		clientProvider         ClientProvider
-		requireAssertResources bool
-		wantErr                bool
-		wantReason             string
-		wantRequeue            bool
+		req                  ctrl.Request
+		clientProvider       ClientProvider
+		ar                   *clustersv1alpha1.AccessRequest
+		kubeconfigSecret     *corev1.Secret
+		wantErr              bool
+		wantReason           string
+		wantResourceCreation bool
+		wantRefresh          bool
 	}{
 		{
 			name: "no oidc processing",
-			req: ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "test",
-				},
-			},
+			req:  request(reqName, reqNamespace),
 			clientProvider: fakeClientProvider{
 				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
 				restConfig: &rest.Config{},
 			},
-			ar: clustersv1alpha1.AccessRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-					Labels: map[string]string{
-						"clusters.openmcp.cloud/provider": providerName,
-						"clusters.openmcp.cloud/profile":  "test",
-					},
-				},
-				Spec: clustersv1alpha1.AccessRequestSpec{
+			ar: accessRequest(reqName, reqNamespace,
+				clustersv1alpha1.AccessRequestSpec{
 					OIDC: &clustersv1alpha1.OIDCConfig{},
 					ClusterRef: &common.ObjectReference{
 						Name: "fakeCluster",
 					},
 				},
-				Status: clustersv1alpha1.AccessRequestStatus{
+				clustersv1alpha1.AccessRequestStatus{
 					Status: common.Status{
 						Phase: clustersv1alpha1.REQUEST_PENDING,
 					},
-				},
-			},
-			wantRequeue: false,
-			wantErr:     true,
-			wantReason:  reasonOIDCRequest,
+				}),
+			wantErr:              true,
+			wantReason:           reasonOIDCRequest,
+			wantResourceCreation: false,
+			wantRefresh:          false,
 		},
 		{
-			name: "cluster interaction failure",
-			req: ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "test",
-				},
-			},
-			ar: clustersv1alpha1.AccessRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-					Labels: map[string]string{
-						"clusters.openmcp.cloud/provider": providerName,
-						"clusters.openmcp.cloud/profile":  "test",
-					},
-				},
-				Spec: clustersv1alpha1.AccessRequestSpec{
+			name: "client provider error",
+			req:  request(reqName, reqNamespace),
+			ar: accessRequest(reqName, reqNamespace,
+				clustersv1alpha1.AccessRequestSpec{
 					ClusterRef: &common.ObjectReference{
 						Name: "fakeCluster",
 					},
+					Token: &clustersv1alpha1.TokenConfig{},
 				},
-				Status: clustersv1alpha1.AccessRequestStatus{
+				clustersv1alpha1.AccessRequestStatus{
 					Status: common.Status{
 						Phase: clustersv1alpha1.REQUEST_PENDING,
 					},
-				},
-			},
-			clientProvider: fakeClientProvider{},
-			wantRequeue:    false,
-			wantErr:        true,
-			wantReason:     reasonKindClusterInteractionError,
+				}),
+			clientProvider:       fakeClientProvider{},
+			wantErr:              true,
+			wantReason:           reasonKindClusterInteractionError,
+			wantResourceCreation: false,
+			wantRefresh:          false,
 		},
 		{
 			name: "create and delete success",
-			req: ctrl.Request{
-				NamespacedName: types.NamespacedName{
-					Namespace: "test",
-					Name:      "test",
-				},
-			},
+			req:  request(reqName, reqNamespace),
 			clientProvider: fakeClientProvider{
 				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
 				restConfig: &rest.Config{},
 			},
-			ar: clustersv1alpha1.AccessRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test",
-					Namespace: "test",
-					Labels: map[string]string{
-						"clusters.openmcp.cloud/provider": providerName,
-						"clusters.openmcp.cloud/profile":  "test",
-					},
-				},
-				Spec: clustersv1alpha1.AccessRequestSpec{
+			ar: accessRequest(reqName, reqNamespace,
+				clustersv1alpha1.AccessRequestSpec{
 					ClusterRef: &common.ObjectReference{
 						Name: "fakeCluster",
 					},
@@ -167,37 +139,87 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 						},
 					},
 				},
-				Status: clustersv1alpha1.AccessRequestStatus{
+				clustersv1alpha1.AccessRequestStatus{
 					Status: common.Status{
-						ObservedGeneration: 0,
-						Phase:              clustersv1alpha1.REQUEST_PENDING,
+						Phase: clustersv1alpha1.REQUEST_PENDING,
 					},
-				},
+				}),
+			wantErr:              false,
+			wantResourceCreation: true,
+			wantRefresh:          false,
+		},
+		{
+			name: "refresh expired token",
+			req:  request(reqName, reqNamespace),
+			clientProvider: fakeClientProvider{
+				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
+				restConfig: &rest.Config{},
 			},
-			wantRequeue:            true,
-			wantErr:                false,
-			requireAssertResources: true,
+			ar: accessRequest(reqName, reqNamespace,
+				clustersv1alpha1.AccessRequestSpec{
+					ClusterRef: &common.ObjectReference{
+						Name: "fakeCluster",
+					},
+					Token: &clustersv1alpha1.TokenConfig{},
+				},
+				clustersv1alpha1.AccessRequestStatus{
+					Status: common.Status{
+						Phase: clustersv1alpha1.AccessRequestGranted,
+					},
+					SecretRef: &common.LocalObjectReference{
+						Name: "test.kubeconfig",
+					},
+				}),
+			kubeconfigSecret: secret(types.NamespacedName{
+				Name:      "test.kubeconfig",
+				Namespace: reqNamespace,
+			},
+				time.Now().Add(-2*time.Hour),
+				time.Now().Add(-1*time.Hour)),
+			wantErr:              false,
+			wantResourceCreation: false,
+			wantRefresh:          true,
+		},
+		{
+			name: "skip refresh of non-expired token",
+			req:  request(reqName, reqNamespace),
+			clientProvider: fakeClientProvider{
+				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
+				restConfig: &rest.Config{},
+			},
+			ar: accessRequest(reqName, reqNamespace,
+				clustersv1alpha1.AccessRequestSpec{
+					ClusterRef: &common.ObjectReference{
+						Name: "fakeCluster",
+					},
+					Token: &clustersv1alpha1.TokenConfig{},
+				},
+				clustersv1alpha1.AccessRequestStatus{
+					Status: common.Status{
+						Phase: clustersv1alpha1.AccessRequestGranted,
+					},
+					SecretRef: &common.LocalObjectReference{
+						Name: "test.kubeconfig",
+					},
+				}),
+			kubeconfigSecret: secret(types.NamespacedName{
+				Name:      "test.kubeconfig",
+				Namespace: reqNamespace,
+			},
+				time.Now().Add(-2*time.Hour),
+				time.Now().Add(24*time.Hour)),
+			wantErr:              false,
+			wantResourceCreation: false,
+			wantRefresh:          false,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			fakeCluster := clustersv1alpha1.Cluster{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "fakeCluster",
-					Annotations: map[string]string{
-						"kind.clusters.openmcp.cloud/name": "fakeCluster",
-					},
-				},
-				Spec: clustersv1alpha1.ClusterSpec{
-					Profile: "kind",
-				},
-			}
-
 			r := AccessRequestReconciler{
 				ProviderName: providerName,
 				Client: fake.NewClientBuilder().
 					WithScheme(scheme).
-					WithObjects(&tt.ar, &fakeCluster).
+					WithObjects(buildFakeObject(tt.ar, tt.kubeconfigSecret)...).
 					WithStatusSubresource(&clustersv1alpha1.AccessRequest{}).
 					Build(),
 				Scheme:          scheme,
@@ -205,7 +227,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				ClientProvider:  tt.clientProvider,
 			}
 			ctx := ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true)))
+
+			// ### RECONCILE ###
+
 			got, gotErr := r.Reconcile(ctx, tt.req)
+
+			// ### ASSERT ERROR ###
 			if gotErr != nil {
 				if !tt.wantErr {
 					t.Errorf("Reconcile() failed: %v", gotErr)
@@ -218,11 +245,19 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			if tt.wantErr {
 				t.Fatal("Reconcile() succeeded unexpectedly")
 			}
-			assert.Equal(t, tt.wantRequeue, got.RequeueAfter > 0)
 
-			if !tt.requireAssertResources {
+			// ### ASSERT SUCCESS ###
+
+			// always requeue token based requests
+			if tt.ar.Spec.Token != nil {
+				assert.True(t, got.RequeueAfter > 0)
+			}
+
+			if !tt.wantResourceCreation {
 				return
 			}
+
+			// ### ASSERT RESOURCE CREATION ###
 
 			expectedRules := exampleRules()
 
@@ -292,7 +327,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				}
 			}
 
-			// assert kubeconfig secret exists
+			// assert kubeconfig secret
 			seList := &corev1.SecretList{}
 			r.List(ctx, seList)
 			secret := &corev1.Secret{
@@ -307,28 +342,33 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.True(t, exists)
 			ownerSet := secret.OwnerReferences[0].Controller
 			assert.True(t, *ownerSet)
+			if tt.kubeconfigSecret != nil {
+				assert.NotEqual(t, tt.kubeconfigSecret, secret)
+			}
 
 			// assert AR status
 			ar := &clustersv1alpha1.AccessRequest{
 				ObjectMeta: metav1.ObjectMeta{
-					Name:      tt.ar.Name,
-					Namespace: tt.ar.Namespace,
+					Name:      tt.req.Name,
+					Namespace: tt.req.Namespace,
 				},
 			}
-			err = r.Get(ctx, client.ObjectKeyFromObject(ar), ar)
-			assert.NoError(t, err)
+			assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(ar), ar))
 			assert.Equal(t, clustersv1alpha1.REQUEST_GRANTED, ar.Status.Phase)
 			assert.Equal(t, secret.Name, ar.Status.SecretRef.Name)
 
 			// delete AR
-			obj := tt.ar.DeepCopy()
+			obj := ar.DeepCopy()
 			obj.SetGroupVersionKind(clustersv1alpha1.GroupVersion.WithKind("AccessRequest"))
 			err = r.Delete(ctx, obj)
 			assert.NoError(t, err)
+
+			// ### RECONCILE DELETE ###
+
 			got, err = r.Reconcile(ctx, tt.req)
 			assert.NoError(t, err)
 
-			// assert cleanup
+			// ### ASSERT CLEANUP ###
 
 			// service account has been removed
 			err = requestedClusterClient.List(ctx, saList)
@@ -426,4 +466,64 @@ func exampleRules() []rbacv1.PolicyRule {
 			Verbs:     []string{"get", "list", "watch"},
 		},
 	}
+}
+
+func secret(nsn types.NamespacedName, creation, expiration time.Time) *corev1.Secret {
+	creConv := strconv.FormatInt(creation.Unix(), 10)
+	expConv := strconv.FormatInt(expiration.Unix(), 10)
+	return &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      nsn.Name,
+			Namespace: nsn.Namespace,
+		},
+		Data: map[string][]byte{
+			clustersv1alpha1.SecretKeyExpirationTimestamp: []byte(expConv),
+			clustersv1alpha1.SecretKeyCreationTimestamp:   []byte(creConv),
+		},
+	}
+}
+
+func request(name, namespace string) ctrl.Request {
+	return ctrl.Request{
+		NamespacedName: types.NamespacedName{
+			Namespace: namespace,
+			Name:      name,
+		},
+	}
+}
+
+func accessRequest(name, namespace string, spec clustersv1alpha1.AccessRequestSpec, status clustersv1alpha1.AccessRequestStatus) *clustersv1alpha1.AccessRequest {
+	return &clustersv1alpha1.AccessRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      name,
+			Namespace: namespace,
+			Labels: map[string]string{
+				"clusters.openmcp.cloud/provider": providerName,
+				"clusters.openmcp.cloud/profile":  "test",
+			},
+		},
+		Spec:   spec,
+		Status: status,
+	}
+}
+
+func buildFakeObject(objects ...client.Object) []client.Object {
+	fakeCluster := clustersv1alpha1.Cluster{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "fakeCluster",
+			Annotations: map[string]string{
+				"kind.clusters.openmcp.cloud/name": "fakeCluster",
+			},
+		},
+		Spec: clustersv1alpha1.ClusterSpec{
+			Profile: "kind",
+		},
+	}
+	result := []client.Object{&fakeCluster}
+	for _, obj := range objects {
+		if obj != nil && !reflect.ValueOf(obj).IsNil() {
+			result = append(result, obj)
+		}
+	}
+	return result
 }

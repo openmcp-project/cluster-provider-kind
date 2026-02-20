@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -42,7 +41,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
-	logf "sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusteraccess"
@@ -77,6 +76,15 @@ var (
 
 type reconcileResult = ctrlutils.ReconcileResult[*clustersv1alpha1.AccessRequest]
 
+// AccessRequestReconciler reconciles a AccessRequest object
+type AccessRequestReconciler struct {
+	ProviderName string
+	client.Client
+	Scheme          *runtime.Scheme
+	ClusterProvider kind.Provider
+	ClientProvider  ClientProvider
+}
+
 // ClientProvider creates a client to connect to the cluster that the AccessRequest belongs to
 type ClientProvider interface {
 	CreateClient(kubeconfig string) (client.Client, *rest.Config, error)
@@ -100,19 +108,10 @@ func (c clientProviderImpl) CreateClient(kubeconfig string) (client.Client, *res
 	return cl, restCfg, nil
 }
 
-// AccessRequestReconciler reconciles a AccessRequest object
-type AccessRequestReconciler struct {
-	ProviderName string
-	client.Client
-	Scheme          *runtime.Scheme
-	ClusterProvider kind.Provider
-	ClientProvider  ClientProvider
-}
-
 // Reconcile is part of the main kubernetes reconciliation loop which aims to
 // move the current state of the cluster closer to the desired state.
 func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	log := logf.FromContext(ctx)
+	log := log.FromContext(ctx)
 	log.Info("Reconcile")
 	defer log.Info("Done")
 	rr := r.reconcile(ctx, req)
@@ -129,7 +128,7 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 }
 
 func (r *AccessRequestReconciler) reconcile(ctx context.Context, req ctrl.Request) reconcileResult {
-	log := logf.FromContext(ctx)
+	log := log.FromContext(ctx)
 	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
 		if apierrors.IsNotFound(err) {
@@ -181,23 +180,23 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, clus
 			return
 		}
 	}
-	name := kindName(cluster)
-	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
-	if err != nil {
-		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
-		return
-	}
-	cl, restCfg, err := r.ClientProvider.CreateClient(kubeconfigStr)
-	if err != nil {
-		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
-		return
-	}
 	ar := rr.Object
 	if ar.Spec.OIDC != nil {
 		rr.ReconcileError = errutils.WithReason(errNotSupported, reasonOIDCRequest)
 		return
 	}
-	if ar.Spec.Token != nil && tokenRefreshRequired(ctx, cl, rr) {
+	if ar.Spec.Token != nil && r.tokenRefreshRequired(ctx, rr) {
+		name := kindName(cluster)
+		kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
+		if err != nil {
+			rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
+			return
+		}
+		cl, restCfg, err := r.ClientProvider.CreateClient(kubeconfigStr)
+		if err != nil {
+			rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
+			return
+		}
 		keep := r.reconcileTokenAccess(ctx, cl, restCfg, rr)
 		if rr.ReconcileError != nil {
 			return
@@ -241,36 +240,6 @@ func (r *AccessRequestReconciler) SetupWithManager(mgr ctrl.Manager) error {
 		).
 		Named("accessrequest").
 		Complete(r)
-}
-
-func (r *AccessRequestReconciler) cleanupResources(ctx context.Context, c client.Client, keep []client.Object, labels map[string]string) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Info("Cleaning up resources that are not required anymore")
-
-	if len(labels) == 0 {
-		return errutils.WithReason(fmt.Errorf("no labels provided for cleanup"), reasonInternalError)
-	}
-	selector := client.MatchingLabels(labels)
-
-	rbgvk := rbacv1.SchemeGroupVersion.WithKind("RoleBindingList")
-	rgvk := rbacv1.SchemeGroupVersion.WithKind("RoleList")
-	crbgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBindingList")
-	crgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleList")
-	sagvk := corev1.SchemeGroupVersion.WithKind("ServiceAccountList")
-
-	resourceCleaners := []resourceCleaner{
-		newResrouceCleaner[*rbacv1.RoleBinding](c, rbgvk, selector, keep),
-		newResrouceCleaner[*rbacv1.Role](c, rgvk, selector, keep),
-		newResrouceCleaner[*rbacv1.ClusterRoleBinding](c, crbgvk, selector, keep),
-		newResrouceCleaner[*rbacv1.ClusterRole](c, crgvk, selector, keep),
-		newResrouceCleaner[*corev1.ServiceAccount](c, sagvk, selector, keep),
-	}
-	for _, cleaner := range resourceCleaners {
-		if err := cleaner.cleanup(ctx); err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 type resourceCleaner interface {
@@ -328,6 +297,36 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 	}
 
 	return errs.Aggregate()
+}
+
+func (r *AccessRequestReconciler) cleanupResources(ctx context.Context, c client.Client, keep []client.Object, labels map[string]string) errutils.ReasonableError {
+	log := logging.FromContextOrPanic(ctx)
+	log.Info("Cleaning up resources that are not required anymore")
+
+	if len(labels) == 0 {
+		return errutils.WithReason(fmt.Errorf("no labels provided for cleanup"), reasonInternalError)
+	}
+	selector := client.MatchingLabels(labels)
+
+	rbgvk := rbacv1.SchemeGroupVersion.WithKind("RoleBindingList")
+	rgvk := rbacv1.SchemeGroupVersion.WithKind("RoleList")
+	crbgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleBindingList")
+	crgvk := rbacv1.SchemeGroupVersion.WithKind("ClusterRoleList")
+	sagvk := corev1.SchemeGroupVersion.WithKind("ServiceAccountList")
+
+	resourceCleaners := []resourceCleaner{
+		newResrouceCleaner[*rbacv1.RoleBinding](c, rbgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.Role](c, rgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.ClusterRoleBinding](c, crbgvk, selector, keep),
+		newResrouceCleaner[*rbacv1.ClusterRole](c, crgvk, selector, keep),
+		newResrouceCleaner[*corev1.ServiceAccount](c, sagvk, selector, keep),
+	}
+	for _, cleaner := range resourceCleaners {
+		if err := cleaner.cleanup(ctx); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func managedResourcesLabels(ac *clustersv1alpha1.AccessRequest) map[string]string {
@@ -485,13 +484,13 @@ func defaultSecretName(ar *clustersv1alpha1.AccessRequest) string {
 	return ctrlutils.ShortenToXCharactersUnsafe(ar.Name, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
 }
 
-func tokenRefreshRequired(ctx context.Context, c client.Client, rr *reconcileResult) bool {
+func (r *AccessRequestReconciler) tokenRefreshRequired(ctx context.Context, rr *reconcileResult) bool {
 	ar := rr.Object
 	if ar.Status.Phase != clustersv1alpha1.REQUEST_GRANTED {
 		return true
 	}
 	s := &corev1.Secret{}
-	if err := c.Get(ctx, ctrlutils.ObjectKey(ar.Status.SecretRef.Name, ar.Namespace), s); err != nil {
+	if err := r.Get(ctx, ctrlutils.ObjectKey(ar.Status.SecretRef.Name, ar.Namespace), s); err != nil {
 		if !apierrors.IsNotFound(err) {
 			rr.ReconcileError = errutils.WithReason(fmt.Errorf("error getting secret '%s/%s': %w", ar.Namespace, ar.Status.SecretRef.Name, err), reasonKindClusterInteractionError)
 			return false
@@ -501,8 +500,8 @@ func tokenRefreshRequired(ctx context.Context, c client.Client, rr *reconcileRes
 	if s == nil {
 		return true
 	}
-	creationTimestamp := base64.StdEncoding.EncodeToString(s.Data[clustersv1alpha1.SecretKeyCreationTimestamp])
-	expirationTimestamp := base64.StdEncoding.EncodeToString(s.Data[clustersv1alpha1.SecretKeyExpirationTimestamp])
+	creationTimestamp := string(s.Data[clustersv1alpha1.SecretKeyCreationTimestamp])
+	expirationTimestamp := string(s.Data[clustersv1alpha1.SecretKeyExpirationTimestamp])
 	if creationTimestamp != "" && expirationTimestamp != "" {
 		tmp, err := strconv.ParseInt(creationTimestamp, 10, 64)
 		if err != nil {
