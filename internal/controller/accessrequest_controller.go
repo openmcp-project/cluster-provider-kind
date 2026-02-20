@@ -18,6 +18,7 @@ package controller
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"slices"
@@ -53,18 +54,26 @@ import (
 )
 
 const (
-	groupName                           = "kind.clusters.openmcp.cloud"
-	managedByNameLabel                  = groupName + "/managed-by-name"
-	managedByNamespaceLabel             = groupName + "/managed-by-namespace"
-	kindRole                            = "Role"
-	reasonKindClusterInteractionProblem = "KindClusterInteractionProblem"
-	reasonInternalError                 = "InternalError"
+	groupName               = "kind.clusters.openmcp.cloud"
+	managedByNameLabel      = groupName + "/managed-by-name"
+	managedByNamespaceLabel = groupName + "/managed-by-namespace"
+	kindRole                = "Role"
+
+	refreshTokenPercentage = 0.8
+
+	reasonKindClusterInteractionError = "KindClusterInteractionError"
+	reasonInternalError               = "InternalError"
+	reasonInvalidReference            = "InvalidReferenceError"
+	reasonOIDCRequest                 = "OIDCBasedAccessRequest"
+	reasonNotResponsible              = "NotResponsible"
 )
 
 var (
-	errFailedToGetReferencedCluster       = errors.New("failed to fetch referenced cluster")
+	errNotSupported                       = errors.New("not supported")
 	defaultRequestedTokenValidityDuration = 30 * 24 * time.Hour // 30 days
 )
+
+type reconcileResult = ctrlutils.ReconcileResult[*clustersv1alpha1.AccessRequest]
 
 // ClientProvider creates a client to connect to the cluster that the AccessRequest belongs to
 type ClientProvider interface {
@@ -104,100 +113,123 @@ func (r *AccessRequestReconciler) Reconcile(ctx context.Context, req ctrl.Reques
 	log := logf.FromContext(ctx)
 	log.Info("Reconcile")
 	defer log.Info("Done")
+	rr := r.reconcile(ctx, req)
+	return ctrlutils.NewOpenMCPStatusUpdaterBuilder[*clustersv1alpha1.AccessRequest]().
+		WithNestedStruct("Status").
+		WithPhaseUpdateFunc(func(_ *clustersv1alpha1.AccessRequest, rr ctrlutils.ReconcileResult[*clustersv1alpha1.AccessRequest]) (string, error) {
+			if rr.ReconcileError != nil || rr.Object == nil {
+				return clustersv1alpha1.REQUEST_PENDING, nil
+			}
+			return clustersv1alpha1.REQUEST_GRANTED, nil
+		}).
+		Build().
+		UpdateStatus(ctx, r.Client, rr)
+}
 
+func (r *AccessRequestReconciler) reconcile(ctx context.Context, req ctrl.Request) reconcileResult {
+	log := logf.FromContext(ctx)
 	ar := &clustersv1alpha1.AccessRequest{}
 	if err := r.Get(ctx, req.NamespacedName, ar); err != nil {
 		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
+			return reconcileResult{}
 		}
-		return ctrl.Result{}, err
+		return reconcileResult{ReconcileError: errutils.WithReason(fmt.Errorf("unable to get resource '%s' from cluster: %w", req.String(), err), reasonKindClusterInteractionError)}
 	}
 
 	if !libutils.IsClusterProviderResponsibleForAccessRequest(ar, r.ProviderName) {
 		log.Info("ClusterProvider is not responsible for this AccessRequest, skipping reconciliation")
-		return ctrl.Result{}, nil
+		return reconcileResult{}
 	}
 
-	defer r.Status().Update(ctx, ar) //nolint:errcheck
+	rr := reconcileResult{
+		Object:     ar,
+		OldObject:  ar.DeepCopy(),
+		Conditions: []metav1.Condition{},
+	}
 
 	if ar.Spec.ClusterRef == nil {
-		return ctrl.Result{}, fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name)
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("AccessRequest %q/%q has no Cluster reference", ar.Namespace, ar.Name), reasonInvalidReference)
+		return rr
 	}
 
 	clusterRef := types.NamespacedName{Name: ar.Spec.ClusterRef.Name, Namespace: ar.Spec.ClusterRef.Namespace}
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, clusterRef, cluster); err != nil && !apierrors.IsNotFound(err) {
 		// TODO: report event or status condition?
-		return ctrl.Result{}, errors.Join(err, errFailedToGetReferencedCluster)
-
+		rr.ReconcileError = errutils.WithReason(err, reasonInvalidReference)
+		return rr
 	} else if !isClusterProviderResponsible(cluster) { // TODO: should be refactored
-		return ctrl.Result{}, fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile)
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("ClusterProfile '%s' is not supported by kind controller", cluster.Spec.Profile), reasonNotResponsible)
+		return rr
 	}
 
 	// handle deletion
 	if !ar.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, ar, cluster)
+		r.handleDelete(ctx, cluster, &rr)
+	} else {
+		r.handleCreateOrUpdate(ctx, cluster, &rr)
 	}
-
-	return r.handleCreateOrUpdate(ctx, ar, cluster)
+	return rr
 }
 
-func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
-	if controllerutil.AddFinalizer(ar, Finalizer) {
-		if err := r.Update(ctx, ar); err != nil {
-			return ctrl.Result{}, err
+func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, cluster *clustersv1alpha1.Cluster, rr *reconcileResult) {
+	if controllerutil.AddFinalizer(rr.Object, Finalizer) {
+		if err := r.Update(ctx, rr.Object); err != nil {
+			rr.ReconcileError = errutils.WithReason(fmt.Errorf("error patching finalizer on resource: %w", err), reasonKindClusterInteractionError)
+			return
 		}
 	}
-
 	name := kindName(cluster)
-
 	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
 	if err != nil {
-		return ctrl.Result{}, err
+		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
+		return
 	}
-
 	cl, restCfg, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
-		return ctrl.Result{}, err
+		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
+		return
 	}
-
+	ar := rr.Object
+	if ar.Spec.OIDC != nil {
+		rr.ReconcileError = errutils.WithReason(errNotSupported, reasonOIDCRequest)
+		return
+	}
 	var keep []client.Object
 	if ar.Spec.Token != nil {
-		keep, err = r.renewToken(ctx, cl, restCfg, ar)
-		if err != nil {
-			return ctrl.Result{}, err
+		if ar.Status.Phase == clustersv1alpha1.REQUEST_GRANTED && !requiresRefresh(ctx, cl, rr) {
+			return
+		}
+		keep = r.requestToken(ctx, cl, restCfg, rr)
+		if rr.ReconcileError != nil {
+			return
 		}
 	}
-
 	if rerr := r.cleanupResources(ctx, cl, keep, managedResourcesLabels(ar)); rerr != nil {
-		return ctrl.Result{}, rerr
+		rr.ReconcileError = rerr
+		return
 	}
-
-	return ctrl.Result{}, nil
 }
 
-func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
-	// remove finalizer - Secret will automatically get deleted because of OwnerReference
-	controllerutil.RemoveFinalizer(ar, Finalizer)
-	if err := r.Update(ctx, ar); err != nil {
-		return ctrl.Result{}, err
-	}
+func (r *AccessRequestReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster, rr *reconcileResult) {
 	name := kindName(cluster)
-
 	kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
 	if err != nil {
-		return ctrl.Result{}, err
+		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
 	}
-
 	cl, _, err := r.ClientProvider.CreateClient(kubeconfigStr)
 	if err != nil {
-		return ctrl.Result{}, err
+		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
 	}
-
-	if rerr := r.cleanupResources(ctx, cl, nil, managedResourcesLabels(ar)); rerr != nil {
-		return ctrl.Result{}, rerr
+	if rerr := r.cleanupResources(ctx, cl, nil, managedResourcesLabels(rr.Object)); rerr != nil {
+		rr.ReconcileError = rerr
 	}
-	return ctrl.Result{}, nil
+	// remove finalizer - Secret will automatically get deleted because of OwnerReference
+	controllerutil.RemoveFinalizer(rr.Object, Finalizer)
+	if err := r.Update(ctx, rr.Object); err != nil {
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("error patching finalizer on resource: %w", err), reasonKindClusterInteractionError)
+	}
+	rr.Object = nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
@@ -237,7 +269,6 @@ func (r *AccessRequestReconciler) cleanupResources(ctx context.Context, c client
 	if err := r.cleanupServiceAccounts(ctx, c, selector, keep); err != nil {
 		return err
 	}
-
 	return nil
 }
 
@@ -248,7 +279,7 @@ func (r *AccessRequestReconciler) cleanupRoleBindings(ctx context.Context, c cli
 	errs := errutils.NewReasonableErrorList()
 	rbs := &rbacv1.RoleBindingList{}
 	if err := c.List(ctx, rbs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing RoleBindings: %w", err), reasonKindClusterInteractionProblem))
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing RoleBindings: %w", err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
 	for _, rb := range rbs.Items {
@@ -269,7 +300,7 @@ func (r *AccessRequestReconciler) cleanupRoleBindings(ctx context.Context, c cli
 			if apierrors.IsNotFound(err) {
 				log.Debug("RoleBinding not found", "resourceName", rb.Name, "resourceNamespace", rb.Namespace)
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting RoleBinding '%s/%s': %w", rb.Namespace, rb.Name, err), reasonKindClusterInteractionProblem))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting RoleBinding '%s/%s': %w", rb.Namespace, rb.Name, err), reasonKindClusterInteractionError))
 			}
 		}
 	}
@@ -283,7 +314,7 @@ func (r *AccessRequestReconciler) cleanupClusterRoleBindings(ctx context.Context
 	errs := errutils.NewReasonableErrorList()
 	crbs := &rbacv1.ClusterRoleBindingList{}
 	if err := c.List(ctx, crbs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoleBindings: %w", err), reasonKindClusterInteractionProblem))
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoleBindings: %w", err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
 	for _, crb := range crbs.Items {
@@ -304,7 +335,7 @@ func (r *AccessRequestReconciler) cleanupClusterRoleBindings(ctx context.Context
 			if apierrors.IsNotFound(err) {
 				log.Debug("ClusterRoleBinding not found", "resourceName", crb.Name)
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRoleBinding '%s': %w", crb.Name, err), reasonKindClusterInteractionProblem))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRoleBinding '%s': %w", crb.Name, err), reasonKindClusterInteractionError))
 			}
 		}
 	}
@@ -318,7 +349,7 @@ func (r *AccessRequestReconciler) cleanupRoles(ctx context.Context, c client.Cli
 	errs := errutils.NewReasonableErrorList()
 	roles := &rbacv1.RoleList{}
 	if err := c.List(ctx, roles, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing Roles: %w", err), reasonKindClusterInteractionProblem))
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing Roles: %w", err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
 	for _, role := range roles.Items {
@@ -339,7 +370,7 @@ func (r *AccessRequestReconciler) cleanupRoles(ctx context.Context, c client.Cli
 			if apierrors.IsNotFound(err) {
 				log.Debug("Role not found", "resourceName", role.Name, "resourceNamespace", role.Namespace)
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting Role '%s/%s': %w", role.Namespace, role.Name, err), reasonKindClusterInteractionProblem))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting Role '%s/%s': %w", role.Namespace, role.Name, err), reasonKindClusterInteractionError))
 			}
 		}
 	}
@@ -353,7 +384,7 @@ func (r *AccessRequestReconciler) cleanupClusterRoles(ctx context.Context, c cli
 	errs := errutils.NewReasonableErrorList()
 	crs := &rbacv1.ClusterRoleList{}
 	if err := c.List(ctx, crs, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoles: %w", err), reasonKindClusterInteractionProblem))
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing ClusterRoles: %w", err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
 	for _, cr := range crs.Items {
@@ -374,7 +405,7 @@ func (r *AccessRequestReconciler) cleanupClusterRoles(ctx context.Context, c cli
 			if apierrors.IsNotFound(err) {
 				log.Debug("ClusterRole not found", "resourceName", cr.Name)
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRole '%s': %w", cr.Name, err), reasonKindClusterInteractionProblem))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ClusterRole '%s': %w", cr.Name, err), reasonKindClusterInteractionError))
 			}
 		}
 	}
@@ -388,7 +419,7 @@ func (r *AccessRequestReconciler) cleanupServiceAccounts(ctx context.Context, c 
 	errs := errutils.NewReasonableErrorList()
 	sas := &corev1.ServiceAccountList{}
 	if err := c.List(ctx, sas, selector); err != nil {
-		errs.Append(errutils.WithReason(fmt.Errorf("error listing ServiceAccounts: %w", err), reasonKindClusterInteractionProblem))
+		errs.Append(errutils.WithReason(fmt.Errorf("error listing ServiceAccounts: %w", err), reasonKindClusterInteractionError))
 		return errs.Aggregate()
 	}
 	for _, sa := range sas.Items {
@@ -409,7 +440,7 @@ func (r *AccessRequestReconciler) cleanupServiceAccounts(ctx context.Context, c 
 			if apierrors.IsNotFound(err) {
 				log.Debug("ServiceAccount not found", "resourceName", sa.Name, "resourceNamespace", sa.Namespace)
 			} else {
-				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ServiceAccount '%s/%s': %w", sa.Namespace, sa.Name, err), reasonKindClusterInteractionProblem))
+				errs.Append(errutils.WithReason(fmt.Errorf("error deleting ServiceAccount '%s/%s': %w", sa.Namespace, sa.Name, err), reasonKindClusterInteractionError))
 			}
 		}
 	}
@@ -423,47 +454,57 @@ func managedResourcesLabels(ac *clustersv1alpha1.AccessRequest) map[string]strin
 	}
 }
 
-// renewToken creates a service account token that reflects the requested cluster access
+// requestToken creates a service account token that reflects the requested cluster access
 // this includes reconciliation of the service account, the related (cluster) roles and (cluster) bindings in the cluster the access request is for
 // and eventually creating a corresponding secret that holds the prepared kubeconfig in the platform cluster
-func (r *AccessRequestReconciler) renewToken(ctx context.Context, c client.Client, cfg *rest.Config, ar *clustersv1alpha1.AccessRequest) ([]client.Object, error) {
+func (r *AccessRequestReconciler) requestToken(ctx context.Context, c client.Client, cfg *rest.Config, rr *reconcileResult) []client.Object {
 	log := logging.FromContextOrPanic(ctx)
-	log.Info("Creating new service account token")
+	log.Info("Refresh service account token if required")
+
+	ar := rr.Object
+	// check if the secret exists and is valid
 
 	// ensure namespace
 	_, err := clusteraccess.EnsureNamespace(ctx, c, AccessRequestServiceAccountNamespace())
 	if err != nil {
-		return nil, err
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("create namespace %s failed: %w", AccessRequestServiceAccountNamespace(), err), reasonKindClusterInteractionError)
+		return nil
 	}
 
 	// ensure service account
 	name := ctrlutils.K8sNameUUIDUnsafe(Environment(), ProviderName(), ar.Namespace, ar.Name)
 	sa, err := clusteraccess.EnsureServiceAccount(ctx, c, name, AccessRequestServiceAccountNamespace(), pairs.MapToPairs(managedResourcesLabels(ar))...)
 	if err != nil {
-		return nil, err
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("create service account %s/%s failed: %w", AccessRequestServiceAccountNamespace(), name, err), reasonKindClusterInteractionError)
+		return nil
 	}
 
-	permissions, err := reconcilePermissions(ctx, c, sa, ar)
-	if err != nil {
-		return permissions, err
+	permObjs, errlist := reconcileRequestedPermissions(ctx, c, sa, ar)
+	if err := errlist.Aggregate(); err != nil {
+		rr.ReconcileError = err
+		return nil
 	}
-	roles, err := reconcileRoles(ctx, c, sa, ar)
-	if err != nil {
-		return permissions, err
+	bindObjs, errlist := reconcileBindingToExistingRoles(ctx, c, sa, ar)
+	if err := errlist.Aggregate(); err != nil {
+		rr.ReconcileError = err
+		return nil
 	}
-	keep := slices.Concat(permissions, roles)
+	keep := slices.Concat(permObjs, bindObjs)
 	keep = append(keep, sa)
 
 	// generate token
 	token, err := clusteraccess.CreateTokenForServiceAccount(ctx, c, sa, &defaultRequestedTokenValidityDuration)
 	if err != nil {
-		return nil, err
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("request service account token failed: %w", err), reasonKindClusterInteractionError)
+		return nil
 	}
+	rr.Result.RequeueAfter = time.Until(clusteraccess.ComputeTokenRenewalTimeWithRatio(token.CreationTimestamp, token.ExpirationTimestamp, refreshTokenPercentage))
 
 	// create kubeconfig
 	kcfg, err := clusteraccess.CreateTokenKubeconfig(ProviderName(), cfg.Host, cfg.CAData, token.Token)
 	if err != nil {
-		return nil, err
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("create token kubeconfig failed: %w", err), reasonInternalError)
+		return nil
 	}
 
 	// create/update secret
@@ -483,20 +524,22 @@ func (r *AccessRequestReconciler) renewToken(ctx context.Context, c client.Clien
 	})
 	s := sm.Empty()
 	if err := resources.CreateOrUpdateResource(ctx, r.Client, sm); err != nil {
-		return nil, err
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("create/update kubeconfig secret failed: %w", err), reasonKindClusterInteractionError)
+		return nil
 	}
 
 	ar.Status.SecretRef = &commonapi.LocalObjectReference{}
 	ar.Status.SecretRef.Name = s.Name
 	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 
-	return keep, nil
+	return keep
 }
 
-func reconcilePermissions(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, error) {
+func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
 	log := logging.FromContextOrPanic(ctx)
 	// ensure roles + bindings
 	keep := []client.Object{}
+	errlist := errutils.NewReasonableErrorList()
 	expectedLabels := pairs.MapToPairs(managedResourcesLabels(ar))
 	subjects := []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa.Name, Namespace: sa.Namespace}}
 	for i, permission := range ar.Spec.Token.Permissions {
@@ -509,7 +552,7 @@ func reconcilePermissions(ctx context.Context, c client.Client, sa *corev1.Servi
 			log.Debug("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
 			rb, r, err := clusteraccess.EnsureRoleAndBinding(ctx, c, roleName, permission.Namespace, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
-				log.Error(err, "error ensuring role")
+				errlist.Append(errutils.WithReason(fmt.Errorf("role (binding) error: %w", err), reasonKindClusterInteractionError))
 				continue
 			}
 			keep = append(keep, r, rb)
@@ -518,17 +561,18 @@ func reconcilePermissions(ctx context.Context, c client.Client, sa *corev1.Servi
 			log.Debug("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
 			crb, cr, err := clusteraccess.EnsureClusterRoleAndBinding(ctx, c, roleName, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
-				log.Error(err, "error ensuring cluster role")
+				errlist.Append(errutils.WithReason(fmt.Errorf("cluster role (binding) error: %w", err), reasonKindClusterInteractionError))
 				continue
 			}
 			keep = append(keep, cr, crb)
 		}
 	}
-	return keep, nil
+	return keep, *errlist
 }
 
-func reconcileRoles(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, error) {
+func reconcileBindingToExistingRoles(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
 	keep := []client.Object{}
+	errlist := errutils.NewReasonableErrorList()
 	expectedLabels := pairs.MapToPairs(managedResourcesLabels(ar))
 	subjects := []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa.Name, Namespace: sa.Namespace}}
 	// ensure ServiceAccount is bound to (Cluster)Roles
@@ -538,22 +582,62 @@ func reconcileRoles(ctx context.Context, c client.Client, sa *corev1.ServiceAcco
 			// Role
 			rb, err := clusteraccess.EnsureRoleBinding(ctx, c, roleBindingName, roleRef.Namespace, roleRef.Name, subjects, expectedLabels...)
 			if err != nil {
-				return nil, err
+				errlist.Append(errutils.WithReason(fmt.Errorf("role binding error: %w", err), reasonKindClusterInteractionError))
+				continue
 			}
 			keep = append(keep, rb)
 		} else {
 			// ClusterRole
 			crb, err := clusteraccess.EnsureClusterRoleBinding(ctx, c, roleBindingName, roleRef.Name, subjects, expectedLabels...)
 			if err != nil {
-				return nil, err
+				errlist.Append(errutils.WithReason(fmt.Errorf("cluster role binding error: %w", err), reasonKindClusterInteractionError))
+				continue
 			}
 			keep = append(keep, crb)
 		}
 	}
-	return keep, nil
+	return keep, *errlist
 }
 
 func defaultSecretName(ar *clustersv1alpha1.AccessRequest) string {
 	suffix := ".kubeconfig"
 	return ctrlutils.ShortenToXCharactersUnsafe(ar.Name, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
+}
+
+func requiresRefresh(ctx context.Context, c client.Client, rr *reconcileResult) bool {
+	ar := rr.Object
+	s := &corev1.Secret{}
+	if err := c.Get(ctx, ctrlutils.ObjectKey(ar.Status.SecretRef.Name, ar.Namespace), s); err != nil {
+		if !apierrors.IsNotFound(err) {
+			rr.ReconcileError = errutils.WithReason(fmt.Errorf("error getting secret '%s/%s': %w", ar.Namespace, ar.Status.SecretRef.Name, err), reasonKindClusterInteractionError)
+			return false
+		}
+		s = nil
+	}
+	if s == nil {
+		return true
+	}
+	creationTimestamp := base64.StdEncoding.EncodeToString(s.Data[clustersv1alpha1.SecretKeyCreationTimestamp])
+	expirationTimestamp := base64.StdEncoding.EncodeToString(s.Data[clustersv1alpha1.SecretKeyExpirationTimestamp])
+	if creationTimestamp != "" && expirationTimestamp != "" {
+		tmp, err := strconv.ParseInt(creationTimestamp, 10, 64)
+		if err != nil {
+			rr.ReconcileError = errutils.WithReason(fmt.Errorf("error parsing creation timestamp from secret '%s/%s': %w", s.Namespace, s.Name, err), reasonInternalError)
+			return false
+		}
+		createdAt := time.Unix(tmp, 0)
+		tmp, err = strconv.ParseInt(expirationTimestamp, 10, 64)
+		if err != nil {
+			rr.ReconcileError = errutils.WithReason(fmt.Errorf("error parsing expiration timestamp from secret '%s/%s': %w", s.Namespace, s.Name, err), reasonInternalError)
+			return false
+		}
+		expiredAt := time.Unix(tmp, 0)
+		tokenRenewalTime := createdAt.Add(time.Duration(float64(expiredAt.Sub(createdAt)) * refreshTokenPercentage))
+		if time.Now().Before(tokenRenewalTime) {
+			// the request is granted, the secret still exists and the token is still valid - nothing to do
+			rr.Result.RequeueAfter = time.Until(tokenRenewalTime)
+			return false
+		}
+	}
+	return true
 }

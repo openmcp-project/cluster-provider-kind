@@ -2,10 +2,11 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
-	"time"
 
+	controllerutilserrors "github.com/openmcp-project/controller-utils/pkg/errors"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/api/common"
 	"github.com/stretchr/testify/assert"
@@ -31,21 +32,101 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	SetEnvironment("unit-test")
 	SetProviderName(providerName)
 	kindClusterRole := "ClusterRole"
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = clustersv1alpha1.AddToScheme(scheme)
 	tests := []struct {
 		name string // description of this test case
 		// Named input parameters for target function.
-		req     ctrl.Request
-		want    ctrl.Result
-		ar      clustersv1alpha1.AccessRequest
-		wantErr bool
+		req                    ctrl.Request
+		ar                     clustersv1alpha1.AccessRequest
+		clientProvider         ClientProvider
+		requireAssertResources bool
+		wantErr                bool
+		wantReason             string
+		wantRequeue            bool
 	}{
 		{
-			name: "test create and delete",
+			name: "no oidc processing",
 			req: ctrl.Request{
 				NamespacedName: types.NamespacedName{
 					Namespace: "test",
 					Name:      "test",
 				},
+			},
+			clientProvider: fakeClientProvider{
+				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
+				restConfig: &rest.Config{},
+			},
+			ar: clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Labels: map[string]string{
+						"clusters.openmcp.cloud/provider": providerName,
+						"clusters.openmcp.cloud/profile":  "test",
+					},
+				},
+				Spec: clustersv1alpha1.AccessRequestSpec{
+					OIDC: &clustersv1alpha1.OIDCConfig{},
+					ClusterRef: &common.ObjectReference{
+						Name: "fakeCluster",
+					},
+				},
+				Status: clustersv1alpha1.AccessRequestStatus{
+					Status: common.Status{
+						Phase: clustersv1alpha1.REQUEST_PENDING,
+					},
+				},
+			},
+			wantRequeue: false,
+			wantErr:     true,
+			wantReason:  reasonOIDCRequest,
+		},
+		{
+			name: "cluster interaction failure",
+			req: ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "test",
+				},
+			},
+			ar: clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test",
+					Namespace: "test",
+					Labels: map[string]string{
+						"clusters.openmcp.cloud/provider": providerName,
+						"clusters.openmcp.cloud/profile":  "test",
+					},
+				},
+				Spec: clustersv1alpha1.AccessRequestSpec{
+					ClusterRef: &common.ObjectReference{
+						Name: "fakeCluster",
+					},
+				},
+				Status: clustersv1alpha1.AccessRequestStatus{
+					Status: common.Status{
+						Phase: clustersv1alpha1.REQUEST_PENDING,
+					},
+				},
+			},
+			clientProvider: fakeClientProvider{},
+			wantRequeue:    false,
+			wantErr:        true,
+			wantReason:     reasonKindClusterInteractionError,
+		},
+		{
+			name: "create and delete success",
+			req: ctrl.Request{
+				NamespacedName: types.NamespacedName{
+					Namespace: "test",
+					Name:      "test",
+				},
+			},
+			clientProvider: fakeClientProvider{
+				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
+				restConfig: &rest.Config{},
 			},
 			ar: clustersv1alpha1.AccessRequest{
 				ObjectMeta: metav1.ObjectMeta{
@@ -92,15 +173,13 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					},
 				},
 			},
-			want:    ctrl.Result{},
-			wantErr: false,
+			wantRequeue:            true,
+			wantErr:                false,
+			requireAssertResources: true,
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			scheme := runtime.NewScheme()
-			_ = clientgoscheme.AddToScheme(scheme)
-			_ = clustersv1alpha1.AddToScheme(scheme)
 			fakeCluster := clustersv1alpha1.Cluster{
 				ObjectMeta: metav1.ObjectMeta{
 					Name: "fakeCluster",
@@ -112,10 +191,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Profile: "kind",
 				},
 			}
-			fakeClusterClient := fakeClientProvider{
-				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
-				restConfig: &rest.Config{},
-			}
+
 			r := AccessRequestReconciler{
 				ProviderName: providerName,
 				Client: fake.NewClientBuilder().
@@ -125,7 +201,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Build(),
 				Scheme:          scheme,
 				ClusterProvider: fakeKindProvider{},
-				ClientProvider:  fakeClusterClient,
+				ClientProvider:  tt.clientProvider,
 			}
 			ctx := ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true)))
 			got, gotErr := r.Reconcile(ctx, tt.req)
@@ -133,18 +209,26 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				if !tt.wantErr {
 					t.Errorf("Reconcile() failed: %v", gotErr)
 				}
+				errWithReason, ok := gotErr.(*controllerutilserrors.ErrorWithReason)
+				assert.True(t, ok)
+				assert.Equal(t, tt.wantReason, errWithReason.Reason())
 				return
 			}
 			if tt.wantErr {
 				t.Fatal("Reconcile() succeeded unexpectedly")
 			}
-			assert.Equal(t, time.Duration(0), got.RequeueAfter)
+			assert.Equal(t, tt.wantRequeue, got.RequeueAfter > 0)
+
+			if !tt.requireAssertResources {
+				return
+			}
 
 			expectedRules := exampleRules()
 
 			// assert service account exists for this access request
 			saList := &corev1.ServiceAccountList{}
-			err := fakeClusterClient.client.List(ctx, saList)
+			requestedClusterClient, _, _ := tt.clientProvider.CreateClient("")
+			err := requestedClusterClient.List(ctx, saList)
 			assert.NoError(t, err)
 			assert.Len(t, saList.Items, 1)
 			sa := saList.Items[0]
@@ -156,7 +240,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Name: "test-cluster-role",
 				},
 			}
-			err = fakeClusterClient.client.Get(ctx, client.ObjectKeyFromObject(clusterRole), clusterRole)
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(clusterRole), clusterRole)
 			assert.NoError(t, err)
 			assert.Len(t, clusterRole.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, clusterRole.Rules)
@@ -168,14 +252,14 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Namespace: "test",
 				},
 			}
-			err = fakeClusterClient.client.Get(ctx, client.ObjectKeyFromObject(role), role)
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(role), role)
 			assert.NoError(t, err)
 			assert.Len(t, role.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, role.Rules)
 
 			// assert cluster role binding exists
 			crbList := &rbacv1.ClusterRoleBindingList{}
-			err = fakeClusterClient.client.List(ctx, crbList)
+			err = requestedClusterClient.List(ctx, crbList)
 			assert.NoError(t, err)
 			// expected: one for the new and one for the 'existing' cluster role
 			assert.Len(t, crbList.Items, 2)
@@ -192,7 +276,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 
 			// assert role binding exists
 			rbList := &rbacv1.RoleBindingList{}
-			err = fakeClusterClient.client.List(ctx, rbList)
+			err = requestedClusterClient.List(ctx, rbList)
 			assert.NoError(t, err)
 			// expected: one for the new and one for the 'existing' cluster role
 			assert.Len(t, rbList.Items, 2)
@@ -246,27 +330,27 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			// assert cleanup
 
 			// service account has been removed
-			err = fakeClusterClient.client.List(ctx, saList)
+			err = requestedClusterClient.List(ctx, saList)
 			assert.NoError(t, err)
 			assert.Len(t, saList.Items, 0)
 
 			// roles have been removed
 			crList := &rbacv1.ClusterRoleList{}
-			err = fakeClusterClient.client.List(ctx, crList)
+			err = requestedClusterClient.List(ctx, crList)
 			assert.NoError(t, err)
 			assert.Len(t, crList.Items, 0)
 
 			rList := &rbacv1.RoleList{}
-			err = fakeClusterClient.client.List(ctx, rList)
+			err = requestedClusterClient.List(ctx, rList)
 			assert.NoError(t, err)
 			assert.Len(t, rList.Items, 0)
 
 			// bindings have been removed
-			err = fakeClusterClient.client.List(ctx, crbList)
+			err = requestedClusterClient.List(ctx, crbList)
 			assert.NoError(t, err)
 			assert.Len(t, crbList.Items, 0)
 
-			err = fakeClusterClient.client.List(ctx, rbList)
+			err = requestedClusterClient.List(ctx, rbList)
 			assert.NoError(t, err)
 			assert.Len(t, rbList.Items, 0)
 
@@ -288,6 +372,9 @@ type fakeClientProvider struct {
 
 // CreateClient implements [ClientProvider].
 func (f fakeClientProvider) CreateClient(kubeconfig string) (client.Client, *rest.Config, error) {
+	if f.client == nil || f.restConfig == nil {
+		return nil, nil, errors.New("fake client error")
+	}
 	return f.client, f.restConfig, nil
 }
 
