@@ -195,19 +195,15 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, clus
 		rr.ReconcileError = errutils.WithReason(errNotSupported, reasonOIDCRequest)
 		return
 	}
-	var keep []client.Object
-	if ar.Spec.Token != nil {
-		if ar.Status.Phase == clustersv1alpha1.REQUEST_GRANTED && !requiresRefresh(ctx, cl, rr) {
-			return
-		}
-		keep = r.requestToken(ctx, cl, restCfg, rr)
+	if ar.Spec.Token != nil && requiresTokenRefresh(ctx, cl, rr) {
+		keep := r.requestToken(ctx, cl, restCfg, rr)
 		if rr.ReconcileError != nil {
 			return
 		}
-	}
-	if rerr := r.cleanupResources(ctx, cl, keep, managedResourcesLabels(ar)); rerr != nil {
-		rr.ReconcileError = rerr
-		return
+		if rerr := r.cleanupResources(ctx, cl, keep, managedResourcesLabels(ar)); rerr != nil {
+			rr.ReconcileError = rerr
+			return
+		}
 	}
 }
 
@@ -604,8 +600,11 @@ func defaultSecretName(ar *clustersv1alpha1.AccessRequest) string {
 	return ctrlutils.ShortenToXCharactersUnsafe(ar.Name, ctrlutils.K8sMaxNameLength-len(suffix)) + suffix
 }
 
-func requiresRefresh(ctx context.Context, c client.Client, rr *reconcileResult) bool {
+func requiresTokenRefresh(ctx context.Context, c client.Client, rr *reconcileResult) bool {
 	ar := rr.Object
+	if ar.Status.Phase != clustersv1alpha1.REQUEST_GRANTED {
+		return true
+	}
 	s := &corev1.Secret{}
 	if err := c.Get(ctx, ctrlutils.ObjectKey(ar.Status.SecretRef.Name, ar.Namespace), s); err != nil {
 		if !apierrors.IsNotFound(err) {
