@@ -146,7 +146,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				}),
 			wantErr:              false,
 			wantResourceCreation: true,
-			wantRefresh:          false,
+			wantRefresh:          true,
 		},
 		{
 			name: "refresh expired token",
@@ -253,6 +253,35 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				assert.True(t, got.RequeueAfter > 0)
 			}
 
+			// assert kubeconfig secret
+			secret := &corev1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      fmt.Sprintf("%s.kubeconfig", tt.req.Name),
+					Namespace: tt.req.Namespace,
+				},
+			}
+			err := r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
+			assert.NoError(t, err)
+			if tt.wantRefresh {
+				_, exists := secret.StringData["kubeconfig"]
+				assert.True(t, exists)
+				ownerSet := secret.OwnerReferences[0].Controller
+				assert.True(t, *ownerSet)
+			} else {
+				assert.Equal(t, tt.kubeconfigSecret, secret)
+			}
+
+			// assert AR status
+			ar := &clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      tt.req.Name,
+					Namespace: tt.req.Namespace,
+				},
+			}
+			assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(ar), ar))
+			assert.Equal(t, clustersv1alpha1.REQUEST_GRANTED, ar.Status.Phase)
+			assert.Equal(t, secret.Name, ar.Status.SecretRef.Name)
+
 			if !tt.wantResourceCreation {
 				return
 			}
@@ -264,7 +293,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			// assert service account exists for this access request
 			saList := &corev1.ServiceAccountList{}
 			requestedClusterClient, _, _ := tt.clientProvider.CreateClient("")
-			err := requestedClusterClient.List(ctx, saList)
+			err = requestedClusterClient.List(ctx, saList)
 			assert.NoError(t, err)
 			assert.Len(t, saList.Items, 1)
 			sa := saList.Items[0]
@@ -326,36 +355,6 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					assert.Equal(t, "ServiceAccount", sub.Kind)
 				}
 			}
-
-			// assert kubeconfig secret
-			seList := &corev1.SecretList{}
-			r.List(ctx, seList)
-			secret := &corev1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      fmt.Sprintf("%s.kubeconfig", tt.req.Name),
-					Namespace: tt.req.Namespace,
-				},
-			}
-			err = r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
-			assert.NoError(t, err)
-			_, exists := secret.StringData["kubeconfig"]
-			assert.True(t, exists)
-			ownerSet := secret.OwnerReferences[0].Controller
-			assert.True(t, *ownerSet)
-			if tt.kubeconfigSecret != nil {
-				assert.NotEqual(t, tt.kubeconfigSecret, secret)
-			}
-
-			// assert AR status
-			ar := &clustersv1alpha1.AccessRequest{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      tt.req.Name,
-					Namespace: tt.req.Namespace,
-				},
-			}
-			assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(ar), ar))
-			assert.Equal(t, clustersv1alpha1.REQUEST_GRANTED, ar.Status.Phase)
-			assert.Equal(t, secret.Name, ar.Status.SecretRef.Name)
 
 			// delete AR
 			obj := ar.DeepCopy()
