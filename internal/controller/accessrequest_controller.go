@@ -18,7 +18,6 @@ package controller
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"slices"
 	"strconv"
@@ -70,7 +69,6 @@ const (
 )
 
 var (
-	errNotSupported                       = errors.New("not supported")
 	defaultRequestedTokenValidityDuration = 30 * 24 * time.Hour // 30 days
 )
 
@@ -180,13 +178,13 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, clus
 			return
 		}
 	}
+	name := kindName(cluster)
 	ar := rr.Object
-	if ar.Spec.OIDC != nil {
-		rr.ReconcileError = errutils.WithReason(errNotSupported, reasonOIDCRequest)
+	if ar.Spec.Token == nil {
+		r.reconcileOIDCAccess(ctx, name, ar, rr)
 		return
 	}
 	if ar.Spec.Token != nil && r.tokenRefreshRequired(ctx, rr) {
-		name := kindName(cluster)
 		kubeconfigStr, err := r.ClusterProvider.KubeConfig(name, false)
 		if err != nil {
 			rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
@@ -206,6 +204,46 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, clus
 			return
 		}
 	}
+}
+
+func (r *AccessRequestReconciler) reconcileOIDCAccess(ctx context.Context, clusterName string, ar *clustersv1alpha1.AccessRequest, rr *reconcileResult) {
+	// TODO: proper access permission processing instead of providing admin access
+	kubeconfigStr, err := r.ClusterProvider.KubeConfig(clusterName, false)
+	if err != nil {
+		rr.ReconcileError = errutils.WithReason(err, reasonKindClusterInteractionError)
+		return
+	}
+	s := types.NamespacedName{
+		Name:      defaultSecretName(ar),
+		Namespace: ar.Namespace,
+	}
+	secret := &corev1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      s.Name,
+			Namespace: s.Namespace,
+		},
+	}
+	_, err = controllerutil.CreateOrUpdate(ctx, r.Client, secret, func() error {
+		secret.Type = corev1.SecretTypeOpaque
+
+		if secret.Data == nil {
+			secret.Data = map[string][]byte{}
+		}
+		secret.Data["kubeconfig"] = []byte(kubeconfigStr)
+		return controllerutil.SetOwnerReference(ar, secret, r.Scheme, func(or *metav1.OwnerReference) {
+			or.Controller = ptr.To(true)
+		})
+	})
+
+	if err != nil {
+		rr.ReconcileError = errutils.WithReason(fmt.Errorf("failed to create or update secret for access request %q/%q: %w", ar.Namespace, ar.Name, err), reasonKindClusterInteractionError)
+		return
+	}
+
+	ar.Status.SecretRef = &commonapi.LocalObjectReference{
+		Name: s.Name,
+	}
+	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 }
 
 func (r *AccessRequestReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster, rr *reconcileResult) {
@@ -388,10 +426,10 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 	}
 
 	// create/update secret
-	sm := resources.NewSecretMutatorWithStringData(defaultSecretName(ar), ar.Namespace, map[string]string{
-		clustersv1alpha1.SecretKeyKubeconfig:          string(kcfg),
-		clustersv1alpha1.SecretKeyExpirationTimestamp: strconv.FormatInt(token.ExpirationTimestamp.Unix(), 10),
-		clustersv1alpha1.SecretKeyCreationTimestamp:   strconv.FormatInt(token.CreationTimestamp.Unix(), 10),
+	sm := resources.NewSecretMutator(defaultSecretName(ar), ar.Namespace, map[string][]byte{
+		clustersv1alpha1.SecretKeyKubeconfig:          kcfg,
+		clustersv1alpha1.SecretKeyExpirationTimestamp: []byte(strconv.FormatInt(token.ExpirationTimestamp.Unix(), 10)),
+		clustersv1alpha1.SecretKeyCreationTimestamp:   []byte(strconv.FormatInt(token.CreationTimestamp.Unix(), 10)),
 	}, corev1.SecretTypeOpaque)
 	sm.MetadataMutator().WithOwnerReferences([]metav1.OwnerReference{
 		{
@@ -408,8 +446,9 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 		return nil
 	}
 
-	ar.Status.SecretRef = &commonapi.LocalObjectReference{}
-	ar.Status.SecretRef.Name = s.Name
+	ar.Status.SecretRef = &commonapi.LocalObjectReference{
+		Name: s.Name,
+	}
 	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 
 	return keep

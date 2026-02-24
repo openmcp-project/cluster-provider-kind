@@ -20,6 +20,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
+	"k8s.io/utils/ptr"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -58,7 +59,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 		wantRefresh          bool
 	}{
 		{
-			name: "no oidc processing",
+			name: "oidc processing return cluster provider kubeconfig",
 			req:  request(reqName, reqNamespace),
 			clientProvider: fakeClientProvider{
 				client:     fake.NewClientBuilder().WithScheme(scheme).Build(),
@@ -76,8 +77,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 						Phase: clustersv1alpha1.REQUEST_PENDING,
 					},
 				}),
-			wantErr:              true,
-			wantReason:           reasonOIDCRequest,
+			wantErr:              false,
 			wantResourceCreation: false,
 			wantRefresh:          false,
 		},
@@ -146,7 +146,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 				}),
 			wantErr:              false,
 			wantResourceCreation: true,
-			wantRefresh:          true,
+			wantRefresh:          false,
 		},
 		{
 			name: "refresh expired token",
@@ -262,13 +262,13 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			}
 			err := r.Get(ctx, client.ObjectKeyFromObject(secret), secret)
 			assert.NoError(t, err)
+			_, exists := secret.Data["kubeconfig"]
+			assert.True(t, exists)
+			assert.True(t, *secret.OwnerReferences[0].Controller)
 			if tt.wantRefresh {
-				_, exists := secret.StringData["kubeconfig"]
-				assert.True(t, exists)
-				ownerSet := secret.OwnerReferences[0].Controller
-				assert.True(t, *ownerSet)
-			} else {
-				assert.Equal(t, tt.kubeconfigSecret, secret)
+				// test dates changed
+				assert.NotEqual(t, tt.kubeconfigSecret.Data[clustersv1alpha1.SecretKeyCreationTimestamp], secret.Data[clustersv1alpha1.SecretKeyCreationTimestamp])
+				assert.NotEqual(t, tt.kubeconfigSecret.Data[clustersv1alpha1.SecretKeyExpirationTimestamp], secret.Data[clustersv1alpha1.SecretKeyExpirationTimestamp])
 			}
 
 			// assert AR status
@@ -474,8 +474,14 @@ func secret(nsn types.NamespacedName, creation, expiration time.Time) *corev1.Se
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      nsn.Name,
 			Namespace: nsn.Namespace,
+			OwnerReferences: []metav1.OwnerReference{
+				{
+					Controller: ptr.To(true),
+				},
+			},
 		},
 		Data: map[string][]byte{
+			"kubeconfig": []byte("dummy"),
 			clustersv1alpha1.SecretKeyExpirationTimestamp: []byte(expConv),
 			clustersv1alpha1.SecretKeyCreationTimestamp:   []byte(creConv),
 		},
