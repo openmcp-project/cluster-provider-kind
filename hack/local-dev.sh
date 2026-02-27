@@ -89,14 +89,33 @@ EOF
 
 pull_docker_images() {
   log_section "Pulling required Docker images"
-  docker image inspect ${OPENMCP_OPERATOR_IMAGE} > /dev/null || docker image pull ${OPENMCP_OPERATOR_IMAGE}
-  docker image inspect ${OPENMCP_CP_KIND_IMAGE} > /dev/null || docker image pull ${OPENMCP_CP_KIND_IMAGE}
+  # Pull images for the current platform to avoid multi-platform manifest issues with kind load.
+  # Docker Desktop 28.x saves multi-platform manifest lists that reference layers for all platforms,
+  # but only downloads layers for your current platform. When kind tries to import the saved image,
+  # containerd attempts to resolve all platform manifests and fails on missing layers.
+  # Note: KinD always runs Linux containers, so we use linux/ARCH regardless of host OS
+  local platform="linux/$(go env GOARCH)"
+
+  docker image inspect ${OPENMCP_OPERATOR_IMAGE} > /dev/null 2>&1 || \
+    docker image pull --platform="${platform}" ${OPENMCP_OPERATOR_IMAGE}
+
+  docker image inspect ${OPENMCP_CP_KIND_IMAGE} > /dev/null 2>&1 || \
+    docker image pull --platform="${platform}" ${OPENMCP_CP_KIND_IMAGE}
 }
 
 load_images_to_kind() {
   log_section "Loading images into KinD cluster"
-  kind load docker-image --name platform ${OPENMCP_OPERATOR_IMAGE}
-  kind load docker-image --name platform ${OPENMCP_CP_KIND_IMAGE}
+  # Use docker save --platform to create single-platform archives, avoiding manifest list issues
+  # in Docker Desktop 28.x when using kind load docker-image directly
+  local platform="linux/$(go env GOARCH)"
+
+  log_info "Saving and loading ${OPENMCP_OPERATOR_IMAGE}..."
+  docker save --platform="${platform}" ${OPENMCP_OPERATOR_IMAGE} | \
+    kind load image-archive --name platform /dev/stdin
+
+  log_info "Saving and loading ${OPENMCP_CP_KIND_IMAGE}..."
+  docker save --platform="${platform}" ${OPENMCP_CP_KIND_IMAGE} | \
+    kind load image-archive --name platform /dev/stdin
 }
 
 setup_openmcp_namespace_and_rbac() {
