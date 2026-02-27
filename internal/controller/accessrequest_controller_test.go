@@ -27,8 +27,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
-	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 )
 
 const (
@@ -222,9 +220,9 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					WithObjects(buildFakeObject(tt.ar, tt.kubeconfigSecret)...).
 					WithStatusSubresource(&clustersv1alpha1.AccessRequest{}).
 					Build(),
-				Scheme:          scheme,
-				ClusterProvider: fakeKindProvider{},
-				ClientProvider:  tt.clientProvider,
+				Scheme:             scheme,
+				KubeConfigProvider: fakeKindConfigProvider{},
+				ClientProvider:     tt.clientProvider,
 			}
 			ctx := ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true)))
 
@@ -411,34 +409,19 @@ type fakeClientProvider struct {
 }
 
 // CreateClient implements [ClientProvider].
-func (f fakeClientProvider) CreateClient(kubeconfig string) (client.Client, *rest.Config, error) {
+func (f fakeClientProvider) CreateClient(string) (client.Client, *rest.Config, error) {
 	if f.client == nil || f.restConfig == nil {
 		return nil, nil, errors.New("fake client error")
 	}
 	return f.client, f.restConfig, nil
 }
 
-var _ kind.Provider = fakeKindProvider{}
+var _ KubeConfigProvider = fakeKindConfigProvider{}
 
-type fakeKindProvider struct{}
-
-// ClusterExists implements [kind.Provider].
-func (f fakeKindProvider) ClusterExists(name string) (bool, error) {
-	panic("unimplemented")
-}
-
-// CreateCluster implements [kind.Provider].
-func (f fakeKindProvider) CreateCluster(name string) error {
-	panic("unimplemented")
-}
-
-// DeleteCluster implements [kind.Provider].
-func (f fakeKindProvider) DeleteCluster(name string) error {
-	panic("unimplemented")
-}
+type fakeKindConfigProvider struct{}
 
 // KubeConfig implements [kind.Provider].
-func (f fakeKindProvider) KubeConfig(name string, localhost bool) (string, error) {
+func (f fakeKindConfigProvider) KubeConfig(name string, localhost bool) (string, error) {
 	return "testkubeconfig", nil
 }
 

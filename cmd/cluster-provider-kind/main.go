@@ -303,11 +303,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.AccessRequestReconciler{
-		ProviderName:    providerName,
-		Client:          mgr.GetClient(),
-		Scheme:          mgr.GetScheme(),
-		ClusterProvider: kindProvider,
-		ClientProvider:  controller.DefaultClientProvider,
+		ProviderName:       providerName,
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		KubeConfigProvider: kindProvider,
+		ClientProvider:     controller.NewClientProvider(kindProvider),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AccessRequest")
 		os.Exit(1)
