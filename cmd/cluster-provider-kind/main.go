@@ -261,6 +261,14 @@ func main() {
 
 	kindProvider := kind.NewKindProvider()
 
+	accessRequestServiceAccountNamespace := os.Getenv("ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE")
+	if accessRequestServiceAccountNamespace == "" {
+		accessRequestServiceAccountNamespace = "accessrequests"
+	}
+	controller.SetAccessRequestServiceAccountNamespace(accessRequestServiceAccountNamespace)
+	controller.SetProviderName(providerName)
+	controller.SetEnvironment(environment)
+
 	mgr, err := ctrl.NewManager(ctrl.GetConfigOrDie(), ctrl.Options{
 		Scheme:                 scheme,
 		Metrics:                metricsServerOptions,
@@ -295,10 +303,11 @@ func main() {
 		os.Exit(1)
 	}
 	if err = (&controller.AccessRequestReconciler{
-		ProviderName: providerName,
-		Client:       mgr.GetClient(),
-		Scheme:       mgr.GetScheme(),
-		Provider:     kindProvider,
+		ProviderName:       providerName,
+		Client:             mgr.GetClient(),
+		Scheme:             mgr.GetScheme(),
+		KubeConfigProvider: kindProvider,
+		ClientProvider:     controller.NewClientProvider(kindProvider),
 	}).SetupWithManager(mgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "AccessRequest")
 		os.Exit(1)
