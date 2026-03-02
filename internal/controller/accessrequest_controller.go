@@ -318,7 +318,7 @@ func newResrouceCleaner[T client.Object](c client.Client, gvk schema.GroupVersio
 
 func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.ReasonableError {
 	log := log.FromContext(ctx)
-	log.V(1).Info("Cleaning up", "kind", r.ulist.GetKind())
+	log.Info("Cleaning up", "kind", r.ulist.GetKind())
 	errs := errutils.NewReasonableErrorList()
 
 	if err := r.c.List(ctx, r.ulist, r.selector); err != nil {
@@ -330,7 +330,7 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 		for _, k := range r.keep {
 			_, isType := k.(T)
 			if k.GetName() == item.GetName() && k.GetNamespace() == item.GetNamespace() && isType {
-				log.V(1).Info("Keeping object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+				log.Info("Keeping object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 				keepThis = true
 				break
 			}
@@ -338,10 +338,10 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 		if keepThis {
 			continue
 		}
-		log.V(1).Info("Deleting object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+		log.Info("Deleting object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 		if err := r.c.Delete(ctx, &item); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.V(1).Info("object not found", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+				log.Info("object not found", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 			} else {
 				errs.Append(errutils.WithReason(fmt.Errorf("error deleting object (%s) '%s/%s': %w", item.GetKind(), item.GetNamespace(), item.GetName(), err), reasonKindClusterInteractionError))
 			}
@@ -474,7 +474,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 		}
 		if permission.Namespace != "" {
 			// ensure role + binding
-			log.V(1).Info("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
+			log.Info("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
 			rb, r, err := clusteraccess.EnsureRoleAndBinding(ctx, c, roleName, permission.Namespace, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
 				errlist.Append(errutils.WithReason(fmt.Errorf("role (binding) error: %w", err), reasonKindClusterInteractionError))
@@ -483,7 +483,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 			keep = append(keep, r, rb)
 		} else {
 			// ensure cluster role + binding
-			log.V(1).Info("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
+			log.Info("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
 			crb, cr, err := clusteraccess.EnsureClusterRoleAndBinding(ctx, c, roleName, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
 				errlist.Append(errutils.WithReason(fmt.Errorf("cluster role (binding) error: %w", err), reasonKindClusterInteractionError))
