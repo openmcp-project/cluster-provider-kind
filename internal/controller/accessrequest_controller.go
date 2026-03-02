@@ -46,7 +46,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	"github.com/openmcp-project/controller-utils/pkg/clusteraccess"
-	"github.com/openmcp-project/controller-utils/pkg/logging"
 	"github.com/openmcp-project/controller-utils/pkg/pairs"
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
@@ -180,9 +179,6 @@ func (r *AccessRequestReconciler) updateStatus(ctx context.Context, ar, arCopy *
 		})
 	}
 	ar.Status.ObservedGeneration = ar.Generation
-	if reconcileError != nil {
-		ar.Status.Phase = clustersv1alpha1.REQUEST_PENDING
-	}
 	if !equality.Semantic.DeepEqual(arCopy.Status, ar.Status) {
 		patch := client.MergeFrom(arCopy)
 		if err := r.Status().Patch(ctx, ar, patch); err != nil {
@@ -321,8 +317,8 @@ func newResrouceCleaner[T client.Object](c client.Client, gvk schema.GroupVersio
 }
 
 func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
-	log.Debug("Cleaning up", "kind", r.ulist.GetKind())
+	log := log.FromContext(ctx)
+	log.V(1).Info("Cleaning up", "kind", r.ulist.GetKind())
 	errs := errutils.NewReasonableErrorList()
 
 	if err := r.c.List(ctx, r.ulist, r.selector); err != nil {
@@ -334,7 +330,7 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 		for _, k := range r.keep {
 			_, isType := k.(T)
 			if k.GetName() == item.GetName() && k.GetNamespace() == item.GetNamespace() && isType {
-				log.Debug("Keeping object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+				log.V(1).Info("Keeping object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 				keepThis = true
 				break
 			}
@@ -342,10 +338,10 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 		if keepThis {
 			continue
 		}
-		log.Debug("Deleting object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+		log.V(1).Info("Deleting object", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 		if err := r.c.Delete(ctx, &item); err != nil {
 			if apierrors.IsNotFound(err) {
-				log.Debug("object not found", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
+				log.V(1).Info("object not found", "kind", item.GetKind(), "resourceName", item.GetName(), "resourceNamespace", item.GetNamespace())
 			} else {
 				errs.Append(errutils.WithReason(fmt.Errorf("error deleting object (%s) '%s/%s': %w", item.GetKind(), item.GetNamespace(), item.GetName(), err), reasonKindClusterInteractionError))
 			}
@@ -356,7 +352,7 @@ func (r resourceCleanerImpl[T]) cleanup(ctx context.Context) errutils.Reasonable
 }
 
 func (r *AccessRequestReconciler) cleanupResources(ctx context.Context, c client.Client, keep []client.Object, labels map[string]string) errutils.ReasonableError {
-	log := logging.FromContextOrPanic(ctx)
+	log := log.FromContext(ctx)
 	log.Info("Cleaning up resources that are not required anymore")
 
 	if len(labels) == 0 {
@@ -396,7 +392,7 @@ func managedResourcesLabels(ac *clustersv1alpha1.AccessRequest) map[string]strin
 // this includes reconciliation of the service account, the related (cluster) roles and (cluster) bindings in the cluster the access request is for
 // and eventually creating a corresponding secret that holds the prepared kubeconfig in the platform cluster
 func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c client.Client, cfg *rest.Config, ar *clustersv1alpha1.AccessRequest) ([]client.Object, *time.Duration, error) {
-	log := logging.FromContextOrPanic(ctx)
+	log := log.FromContext(ctx)
 	log.Info("reconcile token access")
 
 	// ensure namespace
@@ -465,7 +461,7 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 }
 
 func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
-	log := logging.FromContextOrPanic(ctx)
+	log := log.FromContext(ctx)
 	// ensure roles + bindings
 	keep := []client.Object{}
 	errlist := errutils.NewReasonableErrorList()
@@ -478,7 +474,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 		}
 		if permission.Namespace != "" {
 			// ensure role + binding
-			log.Debug("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
+			log.V(1).Info("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
 			rb, r, err := clusteraccess.EnsureRoleAndBinding(ctx, c, roleName, permission.Namespace, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
 				errlist.Append(errutils.WithReason(fmt.Errorf("role (binding) error: %w", err), reasonKindClusterInteractionError))
@@ -487,7 +483,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 			keep = append(keep, r, rb)
 		} else {
 			// ensure cluster role + binding
-			log.Debug("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
+			log.V(1).Info("Ensuring ClusterRole and ClusterRoleBinding", "roleName", roleName)
 			crb, cr, err := clusteraccess.EnsureClusterRoleAndBinding(ctx, c, roleName, subjects, permission.Rules, expectedLabels...)
 			if err != nil {
 				errlist.Append(errutils.WithReason(fmt.Errorf("cluster role (binding) error: %w", err), reasonKindClusterInteractionError))
