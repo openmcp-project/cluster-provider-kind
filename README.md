@@ -91,7 +91,7 @@ KIND_ON_LOCAL_HOST=true go run ./cmd/cluster-provider-kind/main.go run
 
 ### Running Cluster Provider kind with a local registry
 
-You can configure cluster provider kind to provision clusters that are configured to use a local container image registry.
+You can configure cluster provider kind to provision clusters that use a local container image registry.
 
 1. Follow the official documentation to create registry container: [local container image registry](https://kind.sigs.k8s.io/docs/user/local-registry/).
 2. Prepare a [kind-config](https://kind.sigs.k8s.io/docs/user/configuration/) and [containerd hosts.toml](https://github.com/containerd/containerd/blob/main/docs/hosts.md) that have to be available in your cluster provider container, e.g. by injecting these files when initially creating the platform cluster:
@@ -108,7 +108,7 @@ nodes:
     extraMounts:
       - hostPath: /var/run/docker.sock
         containerPath: /var/run/host-docker.sock
-      - hostPath: /path/to/containerd/certs.d # the path to the host config on your local machine because of the host docker.sock
+      - hostPath: /path/to/containerd/certs.d # on your local machine because of the host docker.sock
         containerPath: /etc/containerd/certs.d
 ```
 
@@ -138,7 +138,7 @@ nodes:
         containerPath: /var/run/host-docker.sock
       - hostPath: /path/to/config.yaml
         containerPath: /etc/kind/config.yaml
-      - hostPath: /path/to/containerd/config/certs.d # the path on your local machine that contains the subtree kind-registry:5001/hosts.toml
+      - hostPath: /path/to/containerd/config/certs.d # on your local machine that contains the subtree kind-registry:5001/hosts.toml
         containerPath: /etc/containerd/certs.d
 ```
 
@@ -180,6 +180,7 @@ spec:
 
 | Variable | Required | Default | Description |
 |----------|----------|----------|-------------|
+| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No | "accessrequests" | Namespace where `AccessRequest` service accounts are created |
 | `KIND_CONFIG_FILE` | No | "" | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
 
 ## 📖 Usage
