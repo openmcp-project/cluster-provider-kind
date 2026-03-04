@@ -259,7 +259,10 @@ func main() {
 		})
 	}
 
-	kindProvider := kind.NewKindProvider()
+	kindConfigFile := os.Getenv("KIND_CONFIG_FILE")
+	setupLog.Info("KIND SETUP", "CONFIG FILE", kindConfigFile)
+
+	kindProvider := kind.NewKindProvider(kindConfigFile)
 
 	accessRequestServiceAccountNamespace := os.Getenv("ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE")
 	if accessRequestServiceAccountNamespace == "" {
