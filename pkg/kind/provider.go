@@ -34,18 +34,20 @@ var (
 
 // NewKindProvider returns a new instance of the kind provider for managing Kubernetes clusters.
 // It uses the default Docker-based kind provider configuration.
-func NewKindProvider() Provider {
+func NewKindProvider(configFile string) Provider {
 	return &kindProvider{
 		internal: cluster.NewProvider(
 			cluster.ProviderWithDocker(),
 		),
+		configFile: configFile,
 	}
 }
 
 var _ Provider = &kindProvider{}
 
 type kindProvider struct {
-	internal *cluster.Provider
+	internal   *cluster.Provider
+	configFile string
 }
 
 // ClusterExists implements Provider.
@@ -63,6 +65,9 @@ func (p *kindProvider) CreateCluster(name string) error {
 	options := []cluster.CreateOption{
 		cluster.CreateWithWaitForReady(1 * time.Minute),
 		cluster.CreateWithKubeconfigPath(kubeconfigPath),
+	}
+	if p.configFile != "" {
+		options = append(options, cluster.CreateWithConfigFile(p.configFile))
 	}
 	return p.internal.Create(name, options...)
 }

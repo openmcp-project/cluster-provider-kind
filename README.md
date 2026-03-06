@@ -89,6 +89,100 @@ KIND_ON_LOCAL_HOST=true go run ./cmd/cluster-provider-kind/main.go run
 
 > **Note**: When running the operator outside the cluster (locally), you must set the `KIND_ON_LOCAL_HOST` environment variable to `true`. This tells the operator to use the local Docker socket configuration instead of the in-cluster configuration.
 
+### Running Cluster Provider kind with a local registry
+
+You can configure cluster provider kind to provision clusters that use a local container image registry.
+
+1. Follow the official documentation to create registry container: [local container image registry](https://kind.sigs.k8s.io/docs/user/local-registry/).
+2. Prepare a [kind-config](https://kind.sigs.k8s.io/docs/user/configuration/) and [containerd hosts.toml](https://github.com/containerd/containerd/blob/main/docs/hosts.md) that have to be available in your cluster provider container, e.g. by injecting these files when initially creating the platform cluster:
+
+```yaml
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/host-docker.sock
+      - hostPath: /path/to/containerd/certs.d # on your local machine because of the host docker.sock
+        containerPath: /etc/containerd/certs.d
+```
+
+It is important to note that containerd [registry configuration](https://github.com/containerd/containerd/blob/main/docs/hosts.md#registry-host-namespace) expects a certain directory tree to pick up a hosts.toml. Following the official docs example, the tree has to look as follows on every node:
+
+```shell
+/etc
+├── containerd/
+│   └── certs.d/
+│       └── kind-registry:5001/
+│           └── hosts.toml
+```
+
+While kind won't have any complaints when you try to mount the hosts.toml directly via extraMounts, the resulting `docker run` execution will misinterpret 5001 as [volume option](https://docs.docker.com/engine/storage/bind-mounts/#options-for---volume) and fail. So instead of providing the hosts.toml directly, you need to mount a config directory containing the certs.d subtree with the hosts.toml.
+
+```yaml
+apiVersion: kind.x-k8s.io/v1alpha4
+kind: Cluster
+containerdConfigPatches:
+  - |-
+    [plugins."io.containerd.grpc.v1.cri".registry]
+      config_path = "/etc/containerd/certs.d"
+nodes:
+  - role: control-plane
+    extraMounts:
+      - hostPath: /var/run/docker.sock
+        containerPath: /var/run/host-docker.sock
+      - hostPath: /path/to/config.yaml
+        containerPath: /etc/kind/config.yaml
+      - hostPath: /path/to/containerd/config/certs.d # on your local machine that contains the subtree kind-registry:5001/hosts.toml
+        containerPath: /etc/containerd/certs.d
+```
+
+1. Apply a ClusterProvider resource to your openMCP platform cluster that uses the kind-config and hosts.toml from the platform cluster to create new clusters:
+
+```yaml
+apiVersion: openmcp.cloud/v1alpha1
+kind: ClusterProvider
+metadata:
+  name: kind
+spec:
+  image: ghcr.io/openmcp-project/images/cluster-provider-kind:... # latest local docker image build
+  extraVolumeMounts:
+    - mountPath: /var/run/docker.sock
+      name: docker
+    - mountPath: /etc/kind/config.yaml
+      name: kindconfig
+    - mountPath: /etc/containerd/certs.d
+      name: registryconfig
+  extraVolumes:
+    - name: docker
+      hostPath:
+        path: /var/run/host-docker.sock
+        type: Socket
+    - name: kindconfig
+      hostPath:
+        path: /etc/kind/config.yaml
+        type: File
+    - name: registryconfig
+      hostPath:
+        path: /etc/containerd/certs.d
+        type: Directory
+  env:
+  - name: KIND_CONFIG_FILE
+    value: /etc/kind/config.yaml
+```
+
+## Environment Variables
+
+| Variable | Required | Default | Description |
+|----------|----------|----------|-------------|
+| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No | "accessrequests" | Namespace where `AccessRequest` service accounts are created |
+| `KIND_CONFIG_FILE` | No | "" | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
+
 ## 📖 Usage
 
 ### Creating a `Cluster` via `ClusterRequest`
