@@ -6,7 +6,7 @@ set -e -o pipefail
 # ============================================================================
 # OpenMCP Operator
 # ============================================================================
-OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.17.1}
+OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.18.1}
 OPENMCP_OPERATOR_IMAGE=${OPENMCP_OPERATOR_IMAGE:-ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}}
 OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 
@@ -14,18 +14,18 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # Cluster Provider Kind
 # ============================================================================
 OPENMCP_CP_KIND_VERSION=${OPENMCP_CP_KIND_VERSION:-$(task version)-linux-$(go env GOARCH)}
-OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:v0.0.15}
+OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:v0.2.0}
 
 # ============================================================================
 # Service Providers
 # ============================================================================
-SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:v0.1.5}
-SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:v0.12.0}
+SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:v0.3.0}
+SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:v0.15.0}
 
 # ============================================================================
 # Platform Service Gateway
 # ============================================================================
-PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.4}
+PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.9}
 
 ENVOY_PROXY_IMAGE=${ENVOY_PROXY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-proxy:distroless-v1.36.2}
 ENVOY_GATEWAY_IMAGE=${ENVOY_GATEWAY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-gateway:v1.5.4}
@@ -36,9 +36,9 @@ ENVOY_GATEWAY_CHART_URL=${ENVOY_GATEWAY_CHART_URL:-oci://ghcr.io/openmcp-project
 # ============================================================================
 # Crossplane Provider Configuration
 # ============================================================================
-CROSSPLANE_VERSION=${CROSSPLANE_VERSION:-v1.20.0}
-CROSSPLANE_CHART_URL=${CROSSPLANE_CHART_URL:-ghcr.io/openmcp-project/openmcp/charts/crossplane:1.20.0}
-CROSSPLANE_IMAGE=${CROSSPLANE_IMAGE:-xpkg.crossplane.io/crossplane/crossplane:1.20.0}
+CROSSPLANE_VERSION=${CROSSPLANE_VERSION:-v1.20.5}
+CROSSPLANE_CHART_URL=${CROSSPLANE_CHART_URL:-ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5}
+CROSSPLANE_IMAGE=${CROSSPLANE_IMAGE:-xpkg.crossplane.io/crossplane/crossplane:v1.20.5}
 CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS=${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS:-v0.16.0,v0.15.0}
 
 # ============================================================================
@@ -324,7 +324,7 @@ EOF
 
 setup_service_providers() {
   log_section "Installing service providers"
-  
+
   # Deploy Crossplane if enabled
   if [[ "$DEPLOY_SP_CROSSPLANE" == "true" ]]; then
     log_info "Installing Crossplane service provider"
@@ -340,7 +340,7 @@ EOF
     kubectl wait --for=create -n openmcp-system job/sp-crossplane-init --timeout=120s
     kubectl wait --for=condition=complete -n openmcp-system job/sp-crossplane-init --timeout=120s
   fi
-  
+
   # Deploy Landscaper if enabled
   if [[ "$DEPLOY_SP_LANDSCAPER" == "true" ]]; then
     log_info "Installing Landscaper service provider"
@@ -356,7 +356,7 @@ EOF
     kubectl wait --for=create -n openmcp-system job/sp-landscaper-init --timeout=120s
     kubectl wait --for=condition=complete -n openmcp-system job/sp-landscaper-init --timeout=120s
   fi
-  
+
   # Deploy Gateway if enabled
   if [[ "$DEPLOY_SP_GATEWAY" == "true" ]]; then
     log_info "Installing Gateway platform service"
@@ -376,7 +376,7 @@ EOF
 
 setup_provider_configs() {
   log_section "Configuring service providers"
-  
+
   # Deploy Landscaper provider config if enabled
   if [[ "$DEPLOY_SP_LANDSCAPER" == "true" ]]; then
     log_info "Installing Landscaper provider configuration"
@@ -392,10 +392,10 @@ spec:
     repository: ${LANDSCAPER_REPOSITORY}
     availableVersions:
       - v0.142.0
-      
+
 EOF
   fi
-  
+
   # Deploy Gateway provider config if enabled
   if [[ "$DEPLOY_SP_GATEWAY" == "true" ]]; then
     log_info "Installing Gateway service provider configuration"
@@ -438,10 +438,10 @@ spec:
     - version: ${CROSSPLANE_VERSION}
       chart:
         url: "${CROSSPLANE_CHART_URL}"
-       
+
       image:
         url: "${CROSSPLANE_IMAGE}"
-        
+
   providers:
     availableProviders:
       - name: provider-kubernetes
@@ -480,14 +480,14 @@ EOF
 
 check_inotify_limits() {
   log_section "Checking system inotify limits"
-  
+
   local default_max_user_watches=8192
   local max_user_watches
   max_user_watches=$(cat /proc/sys/fs/inotify/max_user_watches 2>/dev/null) || max_user_watches="0"
-  
+
   local max_user_instances
   max_user_instances=$(cat /proc/sys/fs/inotify/max_user_instances 2>/dev/null) || max_user_instances="0"
-  
+
   if [[ $max_user_watches -le $default_max_user_watches ]]; then
     echo ""
     echo "[WARNING] Low inotify limits detected"
@@ -545,38 +545,38 @@ EOF
 
 reset_clusters() {
   local force=false
-  
+
   # Check for --force flag
   if [[ "$1" == "--force" ]]; then
     force=true
   fi
-  
+
   log_section "Resetting OpenMCP local development environment"
-  
+
   # Get list of clusters
   local clusters
   clusters=$(kind get clusters 2>/dev/null || true)
-  
+
   if [[ -z "$clusters" ]]; then
     log_info "No KinD clusters found"
     return 0
   fi
-  
+
   log_info "Found clusters: $clusters"
-  
+
   if [[ "$force" == false ]]; then
     echo ""
     echo "WARNING: This will delete all KinD clusters:"
     echo "$clusters"
     echo ""
     read -p "Are you sure you want to delete all clusters? (yes/no): " confirmation
-    
+
     if [[ "$confirmation" != "yes" ]]; then
       log_info "Cluster deletion cancelled"
       return 0
     fi
   fi
-  
+
   log_info "Deleting all KinD clusters..."
   kind delete clusters --all
   log_info "All clusters deleted successfully"
@@ -632,4 +632,3 @@ case "$COMMAND" in
     exit 1
     ;;
 esac
-
