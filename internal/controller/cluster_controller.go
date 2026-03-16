@@ -21,7 +21,7 @@ import (
 	"fmt"
 	"os"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -69,26 +69,34 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 
 	cluster := &clustersv1alpha1.Cluster{}
 	if err := r.Get(ctx, req.NamespacedName, cluster); err != nil {
-		if apierrors.IsNotFound(err) {
-			return ctrl.Result{}, nil
-		}
-		return ctrl.Result{}, err
+		return ctrl.Result{}, client.IgnoreNotFound(err)
 	}
-
-	// Always try to update the status
-	defer r.Status().Update(ctx, cluster) //nolint:errcheck
 
 	if !isClusterProviderResponsible(cluster) {
 		return ctrl.Result{}, fmt.Errorf("profile '%s' is not supported by kind controller", cluster.Spec.Profile)
 	}
 
+	prevStatus := cluster.DeepCopy().Status
 	ctx = smartrequeue.NewContext(ctx, r.RequeueStore.For(cluster))
 
-	if !cluster.DeletionTimestamp.IsZero() {
-		return r.handleDelete(ctx, cluster)
+	var result ctrl.Result
+	var err error
+
+	if cluster.DeletionTimestamp.IsZero() {
+		result, err = r.handleCreateOrUpdate(ctx, cluster)
+	} else {
+		result, err = r.handleDelete(ctx, cluster)
 	}
 
-	return r.handleCreateOrUpdate(ctx, cluster)
+	if err != nil {
+		return result, err
+	}
+
+	if !equality.Semantic.DeepEqual(prevStatus, cluster.Status) {
+		return result, r.Status().Update(ctx, cluster)
+	}
+
+	return result, nil
 }
 
 func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
@@ -131,13 +139,18 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv
 //nolint:gocyclo
 func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *clustersv1alpha1.Cluster) (ctrl.Result, error) {
 	requeue := smartrequeue.FromContext(ctx)
-	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
 			return requeue.Error(err)
 		}
+
+		// Return to prevent conflict on subsequent update.
+		// (The update triggers another reconciliation anyway, skipping this block.)
+		return requeue.Never()
 	}
+
+	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
 	if err := r.assignSubnet(ctx, cluster); err != nil {
 		return requeue.Error(err)
