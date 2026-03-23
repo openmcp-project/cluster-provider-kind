@@ -6,6 +6,7 @@ set -e -o pipefail
 # ============================================================================
 # OpenMCP Operator
 # ============================================================================
+# renovate: datasource=github-releases depName=openmcp-project/openmcp-operator
 OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.18.1}
 OPENMCP_OPERATOR_IMAGE=${OPENMCP_OPERATOR_IMAGE:-ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}}
 OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
@@ -13,19 +14,26 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # ============================================================================
 # Cluster Provider Kind
 # ============================================================================
-OPENMCP_CP_KIND_VERSION=${OPENMCP_CP_KIND_VERSION:-$(task version)-linux-$(go env GOARCH)}
-OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:v0.2.0}
+# renovate: datasource=github-releases depName=openmcp-project/cluster-provider-kind
+OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.2.0}
+OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_RELEASE_VERSION}}
 
 # ============================================================================
 # Service Providers
 # ============================================================================
-SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:v0.3.0}
-SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:v0.15.0}
+# renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.0}
+SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
+# renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.15.0}
+SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================
 # Platform Service Gateway
 # ============================================================================
-PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:v0.0.9}
+# renovate: datasource=github-releases depName=openmcp-project/platform-service-gateway
+PLATFORM_SERVICE_GATEWAY_VERSION=${PLATFORM_SERVICE_GATEWAY_VERSION:-v0.0.9}
+PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:${PLATFORM_SERVICE_GATEWAY_VERSION}}
 
 ENVOY_PROXY_IMAGE=${ENVOY_PROXY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-proxy:distroless-v1.36.2}
 ENVOY_GATEWAY_IMAGE=${ENVOY_GATEWAY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-gateway:v1.5.4}
@@ -39,13 +47,11 @@ ENVOY_GATEWAY_CHART_URL=${ENVOY_GATEWAY_CHART_URL:-oci://ghcr.io/openmcp-project
 CROSSPLANE_VERSION=${CROSSPLANE_VERSION:-v1.20.5}
 CROSSPLANE_CHART_URL=${CROSSPLANE_CHART_URL:-ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5}
 CROSSPLANE_IMAGE=${CROSSPLANE_IMAGE:-xpkg.crossplane.io/crossplane/crossplane:v1.20.5}
-CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS=${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS:-v0.16.0,v0.15.0}
 
 # ============================================================================
 # Landscaper Provider Configuration
 # ============================================================================
 LANDSCAPER_REPOSITORY=${LANDSCAPER_REPOSITORY:-europe-docker.pkg.dev/sap-gcp-cp-k8s-stable-hub/landscaper}
-LANDSCAPER_VERSIONS=${LANDSCAPER_VERSIONS:-v0.136.0,v0.137.0}
 
 # ============================================================================
 # Flux2
@@ -530,9 +536,13 @@ Service Provider Deployment Control (default: all true):
 You can override default image versions by exporting environment variables:
   OPENMCP_OPERATOR_VERSION
   OPENMCP_OPERATOR_IMAGE
+  OPENMCP_CP_KIND_RELEASE_VERSION
   OPENMCP_CP_KIND_IMAGE
+  SERVICE_PROVIDER_CROSSPLANE_VERSION
   SERVICE_PROVIDER_CROSSPLANE_IMAGE
+  SERVICE_PROVIDER_LANDSCAPER_VERSION
   SERVICE_PROVIDER_LANDSCAPER_IMAGE
+  PLATFORM_SERVICE_GATEWAY_VERSION
   PLATFORM_SERVICE_GATEWAY_IMAGE
   ENVOY_PROXY_IMAGE
   ENVOY_GATEWAY_IMAGE
