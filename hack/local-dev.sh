@@ -22,17 +22,17 @@ OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cl
 # Service Providers
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
-SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.0}
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.1}
 SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
-SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.15.0}
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.16.0}
 SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================
 # Platform Service Gateway
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/platform-service-gateway
-PLATFORM_SERVICE_GATEWAY_VERSION=${PLATFORM_SERVICE_GATEWAY_VERSION:-v0.0.9}
+PLATFORM_SERVICE_GATEWAY_VERSION=${PLATFORM_SERVICE_GATEWAY_VERSION:-v0.0.10}
 PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:${PLATFORM_SERVICE_GATEWAY_VERSION}}
 
 ENVOY_PROXY_IMAGE=${ENVOY_PROXY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-proxy:distroless-v1.36.2}
