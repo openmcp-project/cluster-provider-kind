@@ -34,10 +34,11 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	commonapi "github.com/openmcp-project/openmcp-operator/api/common"
 
+	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
+
 	"github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/metallb"
-	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
 )
 
 var (
@@ -112,28 +113,28 @@ func (r *ClusterReconciler) handleDelete(ctx context.Context, cluster *clustersv
 	}
 	if len(foreignFinalizers) > 0 {
 		log.Info("Postponing cluster deletion until foreign finalizers are removed", "foreignFinalizers", foreignFinalizers)
-		return requeue.Progressing()
+		return requeue.IsProgressing()
 	}
 
 	name := kindName(cluster)
 
 	exists, err := r.Provider.ClusterExists(name)
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	if !exists {
 		controllerutil.RemoveFinalizer(cluster, Finalizer)
 		if err := r.Update(ctx, cluster); err != nil {
-			return requeue.Error(err)
+			return requeue.ReturnError(err)
 		}
-		return requeue.Never()
+		return requeue.StopRequeue()
 	}
 
 	if err := r.Provider.DeleteCluster(name); err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
-	return requeue.Progressing()
+	return requeue.IsProgressing()
 }
 
 //nolint:gocyclo
@@ -142,33 +143,33 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 
 	if controllerutil.AddFinalizer(cluster, Finalizer) {
 		if err := r.Update(ctx, cluster); err != nil {
-			return requeue.Error(err)
+			return requeue.ReturnError(err)
 		}
 
 		// Return to prevent conflict on subsequent update.
 		// (The update triggers another reconciliation anyway, skipping this block.)
-		return requeue.Never()
+		return requeue.StopRequeue()
 	}
 
 	cluster.Status.Phase = commonapi.StatusPhaseProgressing
 
 	if err := r.assignSubnet(ctx, cluster); err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	name := kindName(cluster)
 
 	exists, err := r.Provider.ClusterExists(name)
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	if !exists {
 		if err := r.Provider.CreateCluster(name); err != nil {
-			return requeue.Error(err)
+			return requeue.ReturnError(err)
 		}
 
-		return requeue.Progressing()
+		return requeue.IsProgressing()
 	}
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:   string("KindReady"),
@@ -179,34 +180,34 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 
 	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	cfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfig))
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	kindClient, err := client.New(cfg, client.Options{Scheme: r.Scheme})
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	cNet, err := kind.SubnetFromCluster(cluster)
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	if err := metallb.Install(ctx, kindClient); err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	metallbReady, err := metallb.IsReady(ctx, kindClient)
 	if err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 	if !metallbReady {
-		return requeue.Progressing()
+		return requeue.IsProgressing()
 	}
 	meta.SetStatusCondition(&cluster.Status.Conditions, metav1.Condition{
 		Type:   "MetalLBReady",
@@ -215,7 +216,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 	})
 
 	if err := metallb.ConfigureSubnet(ctx, kindClient, *cNet); err != nil {
-		return requeue.Error(err)
+		return requeue.ReturnError(err)
 	}
 
 	cluster.Status.Phase = commonapi.StatusPhaseReady
@@ -224,7 +225,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterAndMetalLBReady",
 	})
-	return requeue.Stable()
+	return requeue.IsStable()
 }
 
 // SetupWithManager sets up the controller with the Manager.

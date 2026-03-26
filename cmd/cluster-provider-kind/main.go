@@ -42,11 +42,12 @@ import (
 	clustersv1alpha1 "github.com/openmcp-project/openmcp-operator/api/clusters/v1alpha1"
 	"github.com/openmcp-project/openmcp-operator/api/common"
 
+	"github.com/openmcp-project/controller-utils/pkg/controller/smartrequeue"
+
 	"github.com/openmcp-project/cluster-provider-kind/api/crds"
 	kindv1alpha1 "github.com/openmcp-project/cluster-provider-kind/api/v1alpha1"
 	"github.com/openmcp-project/cluster-provider-kind/internal/controller"
 	"github.com/openmcp-project/cluster-provider-kind/pkg/kind"
-	"github.com/openmcp-project/cluster-provider-kind/pkg/smartrequeue"
 	// +kubebuilder:scaffold:imports
 )
 
