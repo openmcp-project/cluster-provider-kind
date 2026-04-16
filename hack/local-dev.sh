@@ -22,10 +22,10 @@ OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cl
 # Service Providers
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
-SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.1}
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.4.0}
 SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
-SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.16.0}
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.17.0}
 SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================
