@@ -1,51 +1,17 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "git-submodules": {
-    "enabled": true
-  },
-  "minimumReleaseAge": "0 days",
   "extends": [
     "config:recommended",
     "config:best-practices",
     "security:openssf-scorecard",
     "helpers:pinGitHubActionDigests",
-    ":rebaseStalePrs"
+    ":rebaseStalePrs",
+    ":enableVulnerabilityAlerts"
   ],
+  "git-submodules": {
+    "enabled": true
+  },
   "postUpdateOptions": [
     "gomodTidy"
-  ],
-  "customManagers": [
-    {
-      "description": "OpenMCP component versions in hack/local-dev.sh",
-      "customType": "regex",
-      "managerFilePatterns": ["/hack/local-dev\\.sh/"],
-      "matchStrings": [
-        "# renovate: datasource=(?<datasource>[a-z-.]+?) depName=(?<depName>[^\\s]+?)(?: versioning=(?<versioning>[^\\s]+?))?\\s[A-Z_]+=\\$\\{[A-Z_]+:-(?<currentValue>[^\\}]+)\\}"
-      ]
-    }
-  ],
-  "packageRules": [
-    {
-      "matchManagers": [
-        "gomod"
-      ],
-      "matchDepNames": [
-        "go"
-      ],
-      "matchDepTypes": [
-        "golang"
-      ],
-      "rangeStrategy": "bump"
-    },
-    {
-      "matchManagers": ["custom.regex"],
-      "groupName": "All openMCP Project Updates",
-      "groupSlug": "all-openmcp-updates",
-      "minimumReleaseAge": "0 days",
-      "rebaseWhen": "auto",
-      "automerge": true,
-      "automergeType": "pr-comment",
-      "automergeComment": "automerge all openMCP project dependencies updates"
-    }
   ]
 }
