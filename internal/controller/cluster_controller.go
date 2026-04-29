@@ -176,7 +176,17 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		Status: metav1.ConditionTrue,
 		Reason: "ClusterExists",
 	})
-	// TODO: Add kind cluster name to status
+
+	err = cluster.Status.SetProviderStatus(v1alpha1.ClusterStatus{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: v1alpha1.GroupVersion.String(),
+			Kind:       "ClusterStatus",
+		},
+		KindClusterName: name,
+	})
+	if err != nil {
+		return requeue.ReturnError(err)
+	}
 
 	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
 	if err != nil {
