@@ -401,6 +401,145 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	}
 }
 
+func TestShouldUseKindLocalhost(t *testing.T) {
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		envVar      string
+		want        bool
+	}{
+		{
+			name: "no use kind localhost annotation, no env var",
+			want: false,
+		},
+		{
+			name:        "use kind localhost annotation true",
+			annotations: map[string]string{useLocalhostAnnotation: "true"},
+			want:        true,
+		},
+		{
+			name:        "use kind localhost annotation false",
+			annotations: map[string]string{useLocalhostAnnotation: "false"},
+			want:        false,
+		},
+		{
+			name:   "running on localhost env var only",
+			envVar: "true",
+			want:   true,
+		},
+		{
+			name:        "running on localhost env var and kind localhost annotation",
+			annotations: map[string]string{useLocalhostAnnotation: "true"},
+			envVar:      "true",
+			want:        true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if tt.envVar != "" {
+				t.Setenv("KIND_ON_LOCAL_HOST", tt.envVar)
+			}
+			ar := &clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{Annotations: tt.annotations},
+			}
+			assert.Equal(t, tt.want, shouldUseKindLocalhost(ar))
+		})
+	}
+}
+
+func TestAccessRequestReconciler_ResolveHostname(t *testing.T) {
+	clusterName := "test-cluster"
+	cfgHost := "https://172.18.0.3:6443"
+	localhostHost := "https://127.0.0.1:9999"
+
+	tests := []struct {
+		name        string
+		annotations map[string]string
+		provider    KubeConfigProvider
+		wantHost    string
+		wantErr     bool
+		wantReason  string
+	}{
+		{
+			name:     "no localhost - returns cfg.Host without calling provider",
+			provider: configuredKubeConfigProvider{err: errors.New("should not be called")},
+			wantHost: cfgHost,
+		},
+		{
+			name:        "localhost via annotation - returns host from provider kubeconfig",
+			annotations: map[string]string{useLocalhostAnnotation: "true"},
+			provider:    configuredKubeConfigProvider{kubeconfig: minimalKubeconfig(localhostHost)},
+			wantHost:    localhostHost,
+		},
+		{
+			name:        "provider error",
+			annotations: map[string]string{useLocalhostAnnotation: "true"},
+			provider:    configuredKubeConfigProvider{err: errors.New("provider error")},
+			wantErr:     true,
+			wantReason:  reasonKindClusterInteractionError,
+		},
+		{
+			name:        "invalid kubeconfig from provider",
+			annotations: map[string]string{useLocalhostAnnotation: "true"},
+			provider:    configuredKubeConfigProvider{kubeconfig: "not-valid-yaml{{{{"},
+			wantErr:     true,
+			wantReason:  reasonInternalError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			r := &AccessRequestReconciler{KubeConfigProvider: tt.provider}
+			cfg := &rest.Config{Host: cfgHost}
+			ar := &clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{Annotations: tt.annotations},
+			}
+
+			got, err := r.resolveHostname(cfg, ar, clusterName)
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				errWithReason, ok := err.(*controllerutilserrors.ErrorWithReason)
+				assert.True(t, ok)
+				assert.Equal(t, tt.wantReason, errWithReason.Reason())
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantHost, got)
+		})
+	}
+}
+
+var _ KubeConfigProvider = configuredKubeConfigProvider{}
+
+type configuredKubeConfigProvider struct {
+	kubeconfig string
+	err        error
+}
+
+func (f configuredKubeConfigProvider) KubeConfig(_ string, _ bool) (string, error) {
+	return f.kubeconfig, f.err
+}
+
+func minimalKubeconfig(host string) string {
+	return fmt.Sprintf(`apiVersion: v1
+clusters:
+- cluster:
+    server: %s
+  name: cluster
+contexts:
+- context:
+    cluster: cluster
+    user: kind
+  name: cluster
+current-context: cluster
+kind: Config
+users:
+- name: kind
+  user:
+    token: test-token
+`, host)
+}
+
 var _ ClientProvider = fakeClientProvider{}
 
 type fakeClientProvider struct {

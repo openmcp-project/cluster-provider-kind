@@ -70,7 +70,7 @@ DEPLOY_SP_GATEWAY=${DEPLOY_SP_GATEWAY:-true}
 # ============================================================================
 
 log_info() {
-  echo "[INFO] $*"
+  echo -e "[INFO] $*"
 }
 
 log_section() {
@@ -514,14 +514,21 @@ Usage: $(basename "$0") [COMMAND] [OPTIONS]
 
 Commands:
   deploy              Deploy OpenMCP local development environment
+  access-platform-cluster [OPTIONS]
+                      Get the platform cluster
   reset [OPTIONS]     Delete all KinD clusters
   help                Show this help message
+
+Options for access-platform-cluster:
+  --force             Switch current kubectl context to the platform cluster
 
 Options for reset:
   --force             Skip confirmation prompt when deleting clusters
 
 Examples:
   $(basename "$0") deploy              # Deploy everything
+  $(basename "$0") access-platform-cluster          # Get platform kubeconfig via AccessRequest (recommended)
+  $(basename "$0") access-platform-cluster --force  # Use platform cluster by switching current kubectl context
   $(basename "$0") reset               # Delete clusters (with confirmation)
   $(basename "$0") reset --force       # Delete clusters (skip confirmation)
   $(basename "$0") help                # Show this help message
@@ -551,6 +558,63 @@ You can override default image versions by exporting environment variables:
   FLUX2_INSTALL_URL
 
 EOF
+}
+
+access_platform_cluster() {
+  if [[ "$1" == "--force" ]]; then
+    local previous_context_file="/tmp/.openmcp-previous-context"
+    local current_context
+    current_context=$(kubectl config current-context 2>/dev/null || echo "")
+
+    if [[ -n "$current_context" && "$current_context" != "kind-platform" ]]; then
+      echo "$current_context" > "$previous_context_file"
+    fi
+
+    kubectl config use-context kind-platform
+    log_info "Switched current context to 'kind-platform'"
+    if [[ -f "$previous_context_file" ]]; then
+      log_info "To switch back, run:\n\t kubectl config use-context $(cat "$previous_context_file")"
+    fi
+    return
+  fi
+
+  local kubectl="kubectl --context kind-platform"
+
+  log_info "Creating AccessRequest for platform cluster..."
+  $kubectl apply -f - << EOF
+apiVersion: clusters.openmcp.cloud/v1alpha1
+kind: AccessRequest
+metadata:
+  name: platform-local-access
+  annotations:
+    kind.clusters.openmcp.cloud/localhost: "true"
+  labels:
+    clusters.openmcp.cloud/profile: kind
+    clusters.openmcp.cloud/provider: kind
+spec:
+  clusterRef:
+    name: platform
+    namespace: openmcp-system
+  token:
+    permissions:
+      - name: admin-access
+        rules:
+          - apiGroups: ["*"]
+            resources: ["*"]
+            verbs: ["*"]
+EOF
+
+  log_info "Waiting for AccessRequest to be granted..."
+  $kubectl wait --for='jsonpath={.status.phase}=Granted' accessrequest/platform-local-access --timeout=120s
+
+  local secret_name
+  secret_name=$($kubectl get accessrequest platform-local-access -o jsonpath='{.status.secretRef.name}')
+
+  local kubeconfig_file
+  kubeconfig_file=$(mktemp /tmp/platform-kubeconfig-XXXXXX)
+  $kubectl get secret "$secret_name" -o jsonpath='{.data.kubeconfig}' | base64 -d > "$kubeconfig_file"
+
+  log_info "Platform kubeconfig written to:\n\t $kubeconfig_file"
 }
 
 reset_clusters() {
@@ -628,6 +692,9 @@ fi
 case "$COMMAND" in
   deploy)
     deploy_environment
+    ;;
+  access-platform-cluster)
+    access_platform_cluster "$2"
     ;;
   reset)
     reset_clusters "$2"

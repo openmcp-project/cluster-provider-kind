@@ -64,6 +64,8 @@ const (
 	reasonInternalError               = "InternalError"
 	reasonInvalidReference            = "InvalidReference"
 	reasonNotResponsible              = "NotResponsible"
+
+	useLocalhostAnnotation = groupName + "/localhost"
 )
 
 var (
@@ -102,7 +104,7 @@ func NewClientProvider(p KubeConfigProvider) ClientProvider {
 
 // CreateClient implements [ClientProvider].
 func (r clientProviderImpl) CreateClient(clusterName string) (client.Client, *rest.Config, error) {
-	kubeconfig, err := r.configProvider.KubeConfig(clusterName, false)
+	kubeconfig, err := r.configProvider.KubeConfig(clusterName, runsOnLocalHost())
 	if err != nil {
 		return nil, nil, errutils.WithReason(err, reasonKindClusterInteractionError)
 	}
@@ -210,7 +212,7 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		if err != nil {
 			return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
 		}
-		keep, requeueAfter, err := r.reconcileTokenAccess(ctx, cl, restCfg, ar)
+		keep, requeueAfter, err := r.reconcileTokenAccess(ctx, cl, restCfg, ar, name)
 		if err != nil {
 			return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
 		}
@@ -226,7 +228,7 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 
 func (r *AccessRequestReconciler) reconcileOIDCAccess(ctx context.Context, clusterName string, ar *clustersv1alpha1.AccessRequest) (ctrl.Result, error) {
 	// TODO: proper access permission processing instead of providing admin access
-	kubeconfigStr, err := r.KubeConfigProvider.KubeConfig(clusterName, false)
+	kubeconfigStr, err := r.KubeConfigProvider.KubeConfig(clusterName, shouldUseKindLocalhost(ar))
 	if err != nil {
 		return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
 	}
@@ -262,6 +264,12 @@ func (r *AccessRequestReconciler) reconcileOIDCAccess(ctx context.Context, clust
 	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 
 	return ctrl.Result{}, nil
+}
+
+// shouldUseKindLocalhost returns true if the kubeconfig for this AccessRequest
+// should use localhost (kind port mappings) instead of the container IP.
+func shouldUseKindLocalhost(ar *clustersv1alpha1.AccessRequest) bool {
+	return runsOnLocalHost() || ar.Annotations[useLocalhostAnnotation] == "true"
 }
 
 func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) error {
@@ -392,7 +400,7 @@ func managedResourcesLabels(ac *clustersv1alpha1.AccessRequest) map[string]strin
 // reconcileTokenAccess creates a service account token that reflects the requested cluster access
 // this includes reconciliation of the service account, the related (cluster) roles and (cluster) bindings in the cluster the access request is for
 // and eventually creating a corresponding secret that holds the prepared kubeconfig in the platform cluster
-func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c client.Client, cfg *rest.Config, ar *clustersv1alpha1.AccessRequest) ([]client.Object, *time.Duration, error) {
+func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c client.Client, cfg *rest.Config, ar *clustersv1alpha1.AccessRequest, clusterName string) ([]client.Object, *time.Duration, error) {
 	log := log.FromContext(ctx)
 	log.Info("reconcile token access")
 
@@ -427,8 +435,13 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 	}
 	requeueAfter := time.Until(clusteraccess.ComputeTokenRenewalTimeWithRatio(token.CreationTimestamp, token.ExpirationTimestamp, refreshTokenPercentage))
 
+	hostname, err := r.resolveHostname(cfg, ar, clusterName)
+	if err != nil {
+		return nil, nil, err
+	}
+
 	// create kubeconfig
-	kcfg, err := clusteraccess.CreateTokenKubeconfig(ProviderName(), cfg.Host, cfg.CAData, token.Token)
+	kcfg, err := clusteraccess.CreateTokenKubeconfig(ProviderName(), hostname, cfg.CAData, token.Token)
 	if err != nil {
 		return nil, nil, errutils.WithReason(fmt.Errorf("create token kubeconfig failed: %w", err), reasonInternalError)
 	}
@@ -459,6 +472,23 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 
 	return keep, &requeueAfter, nil
+}
+
+// resolveHostname returns the API server host to use in the output kubeconfig.
+// When localhost is requested, it fetches the localhost kubeconfig and extracts the host URL.
+func (r *AccessRequestReconciler) resolveHostname(cfg *rest.Config, ar *clustersv1alpha1.AccessRequest, clusterName string) (string, error) {
+	if !shouldUseKindLocalhost(ar) {
+		return cfg.Host, nil
+	}
+	kubeConfigStr, err := r.KubeConfigProvider.KubeConfig(clusterName, true)
+	if err != nil {
+		return "", errutils.WithReason(fmt.Errorf("get localhost kubeconfig: %w", err), reasonKindClusterInteractionError)
+	}
+	localRestConfig, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeConfigStr))
+	if err != nil {
+		return "", errutils.WithReason(fmt.Errorf("parse localhost kubeconfig: %w", err), reasonInternalError)
+	}
+	return localRestConfig.Host, nil
 }
 
 func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {
