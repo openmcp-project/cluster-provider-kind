@@ -93,6 +93,7 @@ func (r *ClusterReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ct
 		return result, err
 	}
 
+	cluster.Status.ObservedGeneration = cluster.Generation
 	if !equality.Semantic.DeepEqual(prevStatus, cluster.Status) {
 		return result, r.Status().Update(ctx, cluster)
 	}
