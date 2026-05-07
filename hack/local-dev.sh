@@ -70,7 +70,7 @@ DEPLOY_SP_GATEWAY=${DEPLOY_SP_GATEWAY:-true}
 # ============================================================================
 
 log_info() {
-  echo "[INFO] $*"
+  echo -e "[INFO] $*"
 }
 
 log_section() {
@@ -514,14 +514,21 @@ Usage: $(basename "$0") [COMMAND] [OPTIONS]
 
 Commands:
   deploy              Deploy OpenMCP local development environment
+  access-platform-cluster [OPTIONS]
+                      Get the platform cluster kubeconfig
   reset [OPTIONS]     Delete all KinD clusters
   help                Show this help message
+
+Options for access-platform-cluster:
+  --force             Switch current kubectl context to the platform cluster
 
 Options for reset:
   --force             Skip confirmation prompt when deleting clusters
 
 Examples:
   $(basename "$0") deploy              # Deploy everything
+  $(basename "$0") access-platform-cluster          # Get platform cluster kubeconfig
+  $(basename "$0") access-platform-cluster --force  # Switch current kubectl context to the platform cluster
   $(basename "$0") reset               # Delete clusters (with confirmation)
   $(basename "$0") reset --force       # Delete clusters (skip confirmation)
   $(basename "$0") help                # Show this help message
@@ -551,6 +558,32 @@ You can override default image versions by exporting environment variables:
   FLUX2_INSTALL_URL
 
 EOF
+}
+
+access_platform_cluster() {
+  if [[ "$1" == "--force" ]]; then
+    local previous_context_file="/tmp/.openmcp-previous-context"
+    local current_context
+    current_context=$(kubectl config current-context 2>/dev/null || echo "")
+
+    if [[ -n "$current_context" && "$current_context" != "kind-platform" ]]; then
+      echo "$current_context" > "$previous_context_file"
+    fi
+
+    kubectl config use-context kind-platform
+    log_info "Switched current context to 'kind-platform'"
+    if [[ -f "$previous_context_file" ]]; then
+      log_info "To switch back, run:\n\t kubectl config use-context $(cat "$previous_context_file")"
+    fi
+    return
+  fi
+
+  local kubeconfig_file
+  kubeconfig_file=$(mktemp /tmp/platform-kubeconfig-XXXXXX)
+  kind get kubeconfig --name platform > "$kubeconfig_file"
+
+  log_info "Platform kubeconfig written to:\n\t $kubeconfig_file"
+  log_info "Usage:\n\t export KUBECONFIG=$kubeconfig_file"
 }
 
 reset_clusters() {
@@ -628,6 +661,9 @@ fi
 case "$COMMAND" in
   deploy)
     deploy_environment
+    ;;
+  access-platform-cluster)
+    access_platform_cluster "$2"
     ;;
   reset)
     reset_clusters "$2"

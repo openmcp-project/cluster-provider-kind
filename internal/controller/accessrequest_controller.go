@@ -64,6 +64,8 @@ const (
 	reasonInternalError               = "InternalError"
 	reasonInvalidReference            = "InvalidReference"
 	reasonNotResponsible              = "NotResponsible"
+
+	kindLocalhostAddressAnnotation = groupName + "/localhost"
 )
 
 var (
@@ -195,33 +197,42 @@ func (r *AccessRequestReconciler) handleCreateOrUpdate(ctx context.Context, ar *
 		}
 	}
 	name := kindName(cluster)
+
+	// set kind localhost hostname mapping annotation. This is used by service providers running in debug/out of cluster mode to switch to localhost address for API server interactions
+	if err := r.setLocalhostKindAnnotation(ctx, ar, name); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	if ar.Spec.Token == nil {
 		return r.reconcileOIDCAccess(ctx, name, ar)
 	}
-	if ar.Spec.Token != nil {
-		res, err := r.tokenRefreshRequired(ctx, ar)
-		if err != nil {
-			return ctrl.Result{}, err
-		}
-		if res.RequeueAfter > 0 {
-			return res, nil
-		}
-		cl, restCfg, err := r.ClientProvider.CreateClient(name)
-		if err != nil {
-			return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
-		}
-		keep, requeueAfter, err := r.reconcileTokenAccess(ctx, cl, restCfg, ar)
-		if err != nil {
-			return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
-		}
-		if rerr := r.cleanupResources(ctx, cl, keep, managedResourcesLabels(ar)); rerr != nil {
-			return ctrl.Result{}, rerr
-		}
-		return ctrl.Result{
-			RequeueAfter: *requeueAfter,
-		}, nil
+
+	res, err := r.tokenRefreshRequired(ctx, ar)
+	if err != nil {
+		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, nil
+
+	if res.RequeueAfter > 0 {
+		return res, nil
+	}
+
+	cl, restCfg, err := r.ClientProvider.CreateClient(name)
+	if err != nil {
+		return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
+	}
+
+	keep, requeueAfter, err := r.reconcileTokenAccess(ctx, cl, restCfg, ar)
+	if err != nil {
+		return ctrl.Result{}, errutils.WithReason(err, reasonKindClusterInteractionError)
+	}
+
+	if err := r.cleanupResources(ctx, cl, keep, managedResourcesLabels(ar)); err != nil {
+		return ctrl.Result{}, err
+	}
+
+	return ctrl.Result{
+		RequeueAfter: *requeueAfter,
+	}, nil
 }
 
 func (r *AccessRequestReconciler) reconcileOIDCAccess(ctx context.Context, clusterName string, ar *clustersv1alpha1.AccessRequest) (ctrl.Result, error) {
@@ -262,6 +273,26 @@ func (r *AccessRequestReconciler) reconcileOIDCAccess(ctx context.Context, clust
 	ar.Status.Phase = clustersv1alpha1.REQUEST_GRANTED
 
 	return ctrl.Result{}, nil
+}
+
+// setLocalhostKindAnnotation resolves the localhost API server URL for the cluster and writes it as an annotation on the AccessRequest.
+func (r *AccessRequestReconciler) setLocalhostKindAnnotation(ctx context.Context, ar *clustersv1alpha1.AccessRequest, clusterName string) error {
+	localhostKubeconfig, err := r.KubeConfigProvider.KubeConfig(clusterName, true)
+	if err != nil {
+		return errutils.WithReason(fmt.Errorf("failed to `get localhost kubeconfig: %w", err), reasonKindClusterInteractionError)
+	}
+
+	localRestConfig, err := clientcmd.RESTConfigFromKubeConfig([]byte(localhostKubeconfig))
+	if err != nil {
+		return errutils.WithReason(fmt.Errorf("failed to parse localhost kubeconfig: %w", err), reasonInternalError)
+	}
+
+	metav1.SetMetaDataAnnotation(&ar.ObjectMeta, kindLocalhostAddressAnnotation, localRestConfig.Host)
+	if err := r.Update(ctx, ar); err != nil {
+		return errutils.WithReason(fmt.Errorf("failed to set AccessRequest localhost annotation: %w", err), reasonKindClusterInteractionError)
+	}
+
+	return nil
 }
 
 func (r *AccessRequestReconciler) handleDelete(ctx context.Context, ar *clustersv1alpha1.AccessRequest, cluster *clustersv1alpha1.Cluster) error {

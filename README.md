@@ -242,6 +242,24 @@ In case [kind fails to load container images from the local docker store](https:
 }
 ```
 
+#### Accessing the Platform Cluster
+
+To obtain a kubeconfig for the platform cluster, the script creates an `AccessRequest` and waits for it to be granted. The resulting kubeconfig is written to a temporary file:
+
+```bash
+./hack/local-dev.sh access-platform-cluster
+```
+
+Alternatively, you can switch your current kubectl context directly to the platform cluster:
+
+```bash
+./hack/local-dev.sh access-platform-cluster --force
+```
+
+This remembers your previous context and prints a command to switch back.
+
+#### Resetting the Environment
+
 To reset your environment and delete all KinD clusters:
 
 ```bash
