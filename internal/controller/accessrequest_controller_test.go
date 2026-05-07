@@ -401,6 +401,105 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 	}
 }
 
+func TestAccessRequestReconciler_AnnotateLocalhostURL(t *testing.T) {
+	localhostHost := "https://127.0.0.1:9999"
+	scheme := runtime.NewScheme()
+	_ = clientgoscheme.AddToScheme(scheme)
+	_ = clustersv1alpha1.AddToScheme(scheme)
+
+	tests := []struct {
+		name       string
+		provider   KubeConfigProvider
+		wantAnnot  string
+		wantErr    bool
+		wantReason string
+	}{
+		{
+			name:      "sets localhost annotation from provider kubeconfig",
+			provider:  configuredKubeConfigProvider{kubeconfig: minimalKubeconfig(localhostHost)},
+			wantAnnot: localhostHost,
+		},
+		{
+			name:       "provider error",
+			provider:   configuredKubeConfigProvider{err: errors.New("provider error")},
+			wantErr:    true,
+			wantReason: reasonKindClusterInteractionError,
+		},
+		{
+			name:       "invalid kubeconfig from provider",
+			provider:   configuredKubeConfigProvider{kubeconfig: "not-valid-yaml{{{{"},
+			wantErr:    true,
+			wantReason: reasonInternalError,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			ar := &clustersv1alpha1.AccessRequest{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-ar",
+					Namespace: "default",
+				},
+			}
+			r := &AccessRequestReconciler{
+				KubeConfigProvider: tt.provider,
+				Client: fake.NewClientBuilder().
+					WithScheme(scheme).
+					WithObjects(ar).
+					Build(),
+			}
+			ctx := ctrl.LoggerInto(context.Background(), zap.New(zap.UseDevMode(true)))
+
+			err := r.setLocalhostKindAnnotation(ctx, ar, "test-cluster")
+
+			if tt.wantErr {
+				assert.Error(t, err)
+				errWithReason, ok := err.(*controllerutilserrors.ErrorWithReason)
+				assert.True(t, ok)
+				assert.Equal(t, tt.wantReason, errWithReason.Reason())
+				return
+			}
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantAnnot, ar.Annotations[kindLocalhostAddressAnnotation])
+
+			// Verify the annotation was persisted
+			persisted := &clustersv1alpha1.AccessRequest{}
+			assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(ar), persisted))
+			assert.Equal(t, tt.wantAnnot, persisted.Annotations[kindLocalhostAddressAnnotation])
+		})
+	}
+}
+
+var _ KubeConfigProvider = configuredKubeConfigProvider{}
+
+type configuredKubeConfigProvider struct {
+	kubeconfig string
+	err        error
+}
+
+func (f configuredKubeConfigProvider) KubeConfig(_ string, _ bool) (string, error) {
+	return f.kubeconfig, f.err
+}
+
+func minimalKubeconfig(host string) string {
+	return fmt.Sprintf(`apiVersion: v1
+clusters:
+- cluster:
+    server: %s
+  name: cluster
+contexts:
+- context:
+    cluster: cluster
+    user: kind
+  name: cluster
+current-context: cluster
+kind: Config
+users:
+- name: kind
+  user:
+    token: test-token
+`, host)
+}
+
 var _ ClientProvider = fakeClientProvider{}
 
 type fakeClientProvider struct {
@@ -422,7 +521,10 @@ type fakeKindConfigProvider struct{}
 
 // KubeConfig implements [kind.Provider].
 func (f fakeKindConfigProvider) KubeConfig(name string, localhost bool) (string, error) {
-	return "testkubeconfig", nil
+	if localhost {
+		return minimalKubeconfig("https://127.0.0.1:12345"), nil
+	}
+	return minimalKubeconfig("https://172.18.0.3:6443"), nil
 }
 
 func exampleRules() []rbacv1.PolicyRule {
