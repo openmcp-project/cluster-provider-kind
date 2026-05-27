@@ -7,7 +7,7 @@ set -e -o pipefail
 # OpenMCP Operator
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/openmcp-operator
-OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.18.1}
+OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.20.0}
 OPENMCP_OPERATOR_IMAGE=${OPENMCP_OPERATOR_IMAGE:-ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}}
 OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 
@@ -15,17 +15,17 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # Cluster Provider Kind
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/cluster-provider-kind
-OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.2.0}
+OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.4.0}
 OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_RELEASE_VERSION}}
 
 # ============================================================================
 # Service Providers
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
-SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.1}
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.5.1}
 SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
-SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.16.0}
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.20.0}
 SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================
@@ -47,11 +47,13 @@ ENVOY_GATEWAY_CHART_URL=${ENVOY_GATEWAY_CHART_URL:-oci://ghcr.io/openmcp-project
 CROSSPLANE_VERSION=${CROSSPLANE_VERSION:-v1.20.5}
 CROSSPLANE_CHART_URL=${CROSSPLANE_CHART_URL:-ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5}
 CROSSPLANE_IMAGE=${CROSSPLANE_IMAGE:-xpkg.crossplane.io/crossplane/crossplane:v1.20.5}
+CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS=${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS:-v0.16.0,v0.15.0}
 
 # ============================================================================
 # Landscaper Provider Configuration
 # ============================================================================
 LANDSCAPER_REPOSITORY=${LANDSCAPER_REPOSITORY:-europe-docker.pkg.dev/sap-gcp-cp-k8s-stable-hub/landscaper}
+LANDSCAPER_VERSIONS=${LANDSCAPER_VERSIONS:-v0.136.0,v0.137.0}
 
 # ============================================================================
 # Flux2
@@ -397,7 +399,7 @@ spec:
   deployment:
     repository: ${LANDSCAPER_REPOSITORY}
     availableVersions:
-      - v0.142.0
+$(echo "${LANDSCAPER_VERSIONS}" | tr ',' '\n' | sed 's/^/      - /')
 
 EOF
   fi
@@ -453,8 +455,7 @@ spec:
       - name: provider-kubernetes
         package: xpkg.upbound.io/upbound/provider-kubernetes
         versions:
-          - v0.16.0
-          - v0.15.0
+$(echo "${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS}" | tr ',' '\n' | sed 's/^/          - /')
 EOF
   fi
 }
