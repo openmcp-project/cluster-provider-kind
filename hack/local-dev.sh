@@ -397,7 +397,7 @@ spec:
   deployment:
     repository: ${LANDSCAPER_REPOSITORY}
     availableVersions:
-$(echo "${LANDSCAPER_VERSIONS}" | tr ',' '\n' | sed 's/^/      - /')
+      - v0.142.0
 
 EOF
   fi
@@ -453,7 +453,8 @@ spec:
       - name: provider-kubernetes
         package: xpkg.upbound.io/upbound/provider-kubernetes
         versions:
-$(echo "${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS}" | tr ',' '\n' | sed 's/^/          - /')
+          - v0.16.0
+          - v0.15.0
 EOF
   fi
 }
