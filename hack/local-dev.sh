@@ -47,13 +47,11 @@ ENVOY_GATEWAY_CHART_URL=${ENVOY_GATEWAY_CHART_URL:-oci://ghcr.io/openmcp-project
 CROSSPLANE_VERSION=${CROSSPLANE_VERSION:-v1.20.5}
 CROSSPLANE_CHART_URL=${CROSSPLANE_CHART_URL:-ghcr.io/valentingerlach/charts-mirror/crossplane:1.20.5}
 CROSSPLANE_IMAGE=${CROSSPLANE_IMAGE:-xpkg.crossplane.io/crossplane/crossplane:v1.20.5}
-CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS=${CROSSPLANE_PROVIDER_KUBERNETES_VERSIONS:-v0.16.0,v0.15.0}
 
 # ============================================================================
 # Landscaper Provider Configuration
 # ============================================================================
 LANDSCAPER_REPOSITORY=${LANDSCAPER_REPOSITORY:-europe-docker.pkg.dev/sap-gcp-cp-k8s-stable-hub/landscaper}
-LANDSCAPER_VERSIONS=${LANDSCAPER_VERSIONS:-v0.136.0,v0.137.0}
 
 # ============================================================================
 # Flux2
