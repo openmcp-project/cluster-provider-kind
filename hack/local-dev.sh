@@ -7,7 +7,7 @@ set -e -o pipefail
 # OpenMCP Operator
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/openmcp-operator
-OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.20.0}
+OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v0.18.0}
 OPENMCP_OPERATOR_IMAGE=${OPENMCP_OPERATOR_IMAGE:-ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}}
 OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 
