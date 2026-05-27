@@ -15,17 +15,17 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # Cluster Provider Kind
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/cluster-provider-kind
-OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.2.0}
+OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.4.0}
 OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_RELEASE_VERSION}}
 
 # ============================================================================
 # Service Providers
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
-SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.3.1}
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v0.5.1}
 SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
-SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.16.0}
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v0.20.0}
 SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================

@@ -46,7 +46,7 @@ var (
 	Finalizer = clustersv1alpha1.GroupVersion.Group + "/finalizer"
 
 	// AnnotationName can be used to override the name of the kind cluster.
-	AnnotationName = v1alpha1.GroupVersion.Group + "/name"
+	AnnotationName = v1alpha1.SchemeGroupVersion.Group + "/name"
 )
 
 const (
@@ -180,7 +180,7 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 
 	err = cluster.Status.SetProviderStatus(v1alpha1.ClusterStatus{
 		TypeMeta: metav1.TypeMeta{
-			APIVersion: v1alpha1.GroupVersion.String(),
+			APIVersion: v1alpha1.SchemeGroupVersion.String(),
 			Kind:       "ClusterStatus",
 		},
 		KindClusterName: name,
