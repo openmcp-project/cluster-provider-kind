@@ -3,7 +3,6 @@
   "git-submodules": {
     "enabled": true
   },
-  "minimumReleaseAge": "0 days",
   "extends": [
     "config:recommended",
     "config:best-practices",
