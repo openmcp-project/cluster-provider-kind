@@ -30,7 +30,7 @@ var (
 	errInvalidIP           = errors.New("invalid textual representation of an IP address")
 
 	// AnnotationAssignedSubnet is the annotation used to store the assigned subnet for a cluster
-	AnnotationAssignedSubnet = v1alpha1.GroupVersion.Group + "/assigned-subnet"
+	AnnotationAssignedSubnet = v1alpha1.SchemeGroupVersion.Group + "/assigned-subnet"
 	lockListClusters         = sync.Mutex{}
 )
 

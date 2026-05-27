@@ -2,6 +2,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
 )
 
 // ProviderConfigSpec defines the desired state of ProviderConfig
@@ -30,4 +31,11 @@ type ProviderConfigList struct {
 	metav1.TypeMeta `json:",inline"`
 	metav1.ListMeta `json:"metadata,omitempty"`
 	Items           []ProviderConfig `json:"items"`
+}
+
+func init() {
+	SchemeBuilder.Register(func(s *runtime.Scheme) error {
+		s.AddKnownTypes(SchemeGroupVersion, &ProviderConfig{}, &ProviderConfigList{})
+		return nil
+	})
 }
