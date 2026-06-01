@@ -15,7 +15,7 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # Cluster Provider Kind
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/cluster-provider-kind
-OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.4.0}
+OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.4.1}
 OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_RELEASE_VERSION}}
 
 # ============================================================================
