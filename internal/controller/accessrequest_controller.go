@@ -65,7 +65,8 @@ const (
 	reasonInvalidReference            = "InvalidReference"
 	reasonNotResponsible              = "NotResponsible"
 
-	kindLocalhostAddressAnnotation = groupName + "/localhost"
+	openControlPlaneGroupName      = "open-control-plane.io"
+	kindLocalhostAddressAnnotation = "clusters." + openControlPlaneGroupName + "/local-access"
 )
 
 var (
