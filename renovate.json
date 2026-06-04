@@ -18,7 +18,9 @@
     {
       "description": "OpenMCP component versions in hack/local-dev.sh",
       "customType": "regex",
-      "managerFilePatterns": ["/hack/local-dev\\.sh/"],
+      "managerFilePatterns": [
+        "/hack/local-dev\\.sh/"
+      ],
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-.]+?) depName=(?<depName>[^\\s]+?)(?: versioning=(?<versioning>[^\\s]+?))?\\s[A-Z_]+=\\$\\{[A-Z_]+:-(?<currentValue>[^\\}]+)\\}"
       ]
@@ -38,7 +40,9 @@
       "rangeStrategy": "bump"
     },
     {
-      "matchManagers": ["custom.regex"],
+      "matchManagers": [
+        "custom.regex"
+      ],
       "groupName": "All openMCP Project Updates",
       "groupSlug": "all-openmcp-updates",
       "minimumReleaseAge": "0 days",
@@ -46,6 +50,14 @@
       "automerge": true,
       "automergeType": "pr-comment",
       "automergeComment": "automerge all openMCP project dependencies updates"
+    },
+    {
+      "description": "Group openmcp-project/build submodule and workflow updates",
+      "matchDepNames": [
+        "hack/common",
+        "openmcp-project/build"
+      ],
+      "groupName": "openmcp-project/build"
     }
   ]
 }
