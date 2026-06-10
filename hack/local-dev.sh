@@ -166,6 +166,9 @@ data:
   config: |
     managedControlPlane:
       mcpClusterPurpose: mcp
+      exposedEndpoints:
+      - name: apiserver-external
+      - name: apiserver-internal
     scheduler:
       scope: Cluster
       purposeMappings:
