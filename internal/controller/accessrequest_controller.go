@@ -435,7 +435,7 @@ func (r *AccessRequestReconciler) reconcileTokenAccess(ctx context.Context, c cl
 	}
 
 	// ensure service account
-	name := ctrlutils.K8sNameUUIDUnsafe(Environment(), ProviderName(), ar.Namespace, ar.Name)
+	name := ctrlutils.NameHashSHAKE128Base32(Environment(), ProviderName(), ar.Namespace, ar.Name)
 	sa, err := clusteraccess.EnsureServiceAccount(ctx, c, name, AccessRequestServiceAccountNamespace(), pairs.MapToPairs(managedResourcesLabels(ar))...)
 	if err != nil {
 		return nil, nil, errutils.WithReason(fmt.Errorf("create service account %s/%s failed: %w", AccessRequestServiceAccountNamespace(), name, err), reasonKindClusterInteractionError)
@@ -503,7 +503,7 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 	for i, permission := range ar.Spec.Token.Permissions {
 		roleName := permission.Name
 		if roleName == "" {
-			roleName = fmt.Sprintf("openmcp:permission:%s:%d", ctrlutils.K8sNameUUIDUnsafe(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
+			roleName = fmt.Sprintf("openmcp:permission:%s:%d", ctrlutils.NameHashSHAKE128Base32(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
 		}
 		if permission.Namespace != "" {
 			// ensure role + binding
@@ -535,7 +535,7 @@ func reconcileRequestedRoleBindings(ctx context.Context, c client.Client, sa *co
 	subjects := []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa.Name, Namespace: sa.Namespace}}
 	// ensure ServiceAccount is bound to (Cluster)Roles
 	for i, roleRef := range ar.Spec.Token.RoleRefs {
-		roleBindingName := fmt.Sprintf("openmcp:roleref:%s:%d", ctrlutils.K8sNameUUIDUnsafe(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
+		roleBindingName := fmt.Sprintf("openmcp:roleref:%s:%d", ctrlutils.NameHashSHAKE128Base32(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
 		if roleRef.Kind == kindRole {
 			// Role
 			rb, err := clusteraccess.EnsureRoleBinding(ctx, c, roleBindingName, roleRef.Namespace, roleRef.Name, subjects, expectedLabels...)
