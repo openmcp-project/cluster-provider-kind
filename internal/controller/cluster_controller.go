@@ -189,17 +189,34 @@ func (r *ClusterReconciler) handleCreateOrUpdate(ctx context.Context, cluster *c
 		return requeue.ReturnError(err)
 	}
 
-	kubeconfig, err := r.Provider.KubeConfig(name, runsOnLocalHost())
+	localhostKubeconfig, err := r.Provider.KubeConfig(name, true)
+	if err != nil {
+		return requeue.ReturnError(err)
+	}
+	containerKubeconfig, err := r.Provider.KubeConfig(name, false)
 	if err != nil {
 		return requeue.ReturnError(err)
 	}
 
-	cfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(kubeconfig))
+	localhostCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(localhostKubeconfig))
+	if err != nil {
+		return requeue.ReturnError(err)
+	}
+	containerCfg, err := clientcmd.RESTConfigFromKubeConfig([]byte(containerKubeconfig))
 	if err != nil {
 		return requeue.ReturnError(err)
 	}
 
-	kindClient, err := client.New(cfg, client.Options{Scheme: r.Scheme})
+	cluster.Status.Endpoints = clustersv1alpha1.Endpoints{}
+	cluster.Status.Endpoints.Set(clustersv1alpha1.APISERVER_ENDPOINT_EXTERNAL, localhostCfg.Host)
+	cluster.Status.Endpoints.Set(clustersv1alpha1.APISERVER_ENDPOINT_INTERNAL, containerCfg.Host)
+
+	var kindClient client.Client
+	if runsOnLocalHost() {
+		kindClient, err = client.New(localhostCfg, client.Options{Scheme: r.Scheme})
+	} else {
+		kindClient, err = client.New(containerCfg, client.Options{Scheme: r.Scheme})
+	}
 	if err != nil {
 		return requeue.ReturnError(err)
 	}

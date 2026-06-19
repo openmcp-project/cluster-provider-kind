@@ -7,7 +7,7 @@ set -e -o pipefail
 # OpenMCP Operator
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/openmcp-operator
-OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v1.0.0}
+OPENMCP_OPERATOR_VERSION=${OPENMCP_OPERATOR_VERSION:-v1.1.0}
 OPENMCP_OPERATOR_IMAGE=${OPENMCP_OPERATOR_IMAGE:-ghcr.io/openmcp-project/images/openmcp-operator:${OPENMCP_OPERATOR_VERSION}}
 OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 
@@ -166,6 +166,9 @@ data:
   config: |
     managedControlPlane:
       mcpClusterPurpose: mcp
+      exposedEndpoints:
+      - name: apiserver-external
+      - name: apiserver-internal
     scheduler:
       scope: Cluster
       purposeMappings:
@@ -474,8 +477,8 @@ wait_for_onboarding_cluster() {
 setup_managed_control_plane() {
   log_section "Setting up managed control plane"
   kubectl apply -f - << EOF
-apiVersion: core.openmcp.cloud/v2alpha1
-kind: ManagedControlPlaneV2
+apiVersion: core.open-control-plane.io/v2alpha1
+kind: ControlPlane
 metadata:
   name: test
 spec:
