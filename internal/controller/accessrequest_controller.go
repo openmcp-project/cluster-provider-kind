@@ -500,17 +500,19 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 	errlist := errutils.NewReasonableErrorList()
 	expectedLabels := pairs.MapToPairs(managedResourcesLabels(ar))
 	subjects := []rbacv1.Subject{{Kind: rbacv1.ServiceAccountKind, Name: sa.Name, Namespace: sa.Namespace}}
-	namespaceCreationAllowed := hasNamespaceCreatePermission(ar.Spec.Token.Permissions)
 	for i, permission := range ar.Spec.Token.Permissions {
 		roleName := permission.Name
 		if roleName == "" {
 			roleName = fmt.Sprintf("openmcp:permission:%s:%d", ctrlutils.NameHashSHAKE128Base32(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
 		}
 		if permission.Namespace != "" {
-			// ensure namespace
-			if err := ensureNamespace(ctx, c, permission.Namespace, namespaceCreationAllowed); err != nil {
-				errlist.Append(err)
-				continue
+			// ensure namespace for role + binding if not disabled
+			if !permission.DisableAutomaticNamespaceCreation {
+				log.Info("Ensuring Namespace for Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
+				if _, err := clusteraccess.EnsureNamespace(ctx, c, permission.Namespace); err != nil {
+					errlist.Append(errutils.WithReason(fmt.Errorf("error ensuring namespace '%s' for role '%s': %w", permission.Namespace, roleName, err), reasonKindClusterInteractionError))
+					continue
+				}
 			}
 			// ensure role + binding
 			log.Info("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
@@ -532,46 +534,6 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 		}
 	}
 	return keep, *errlist
-}
-
-// ensureNamespace make sure that namespace either already exists or is created given that namespaceCreationAllowed is true
-func ensureNamespace(ctx context.Context, c client.Client, namespace string, namespaceCreationAllowed bool) errutils.ReasonableError {
-	err := c.Get(ctx, types.NamespacedName{Name: namespace}, &corev1.Namespace{})
-	if err == nil {
-		return nil
-	}
-	if !apierrors.IsNotFound(err) {
-		return errutils.WithReason(fmt.Errorf("role (binding) error: failed to get namespace %q: %w", namespace, err), reasonKindClusterInteractionError)
-	}
-	if !namespaceCreationAllowed {
-		return errutils.WithReason(fmt.Errorf("role (binding) error: namespace %q does not exist and permission to create namespaces was not requested", namespace), reasonKindClusterInteractionError)
-	}
-	nsToCreate := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
-	if err := c.Create(ctx, nsToCreate); err != nil {
-		return errutils.WithReason(fmt.Errorf("role (binding) error: failed to create namespace %q: %w", namespace, err), reasonKindClusterInteractionError)
-	}
-	return nil
-}
-
-// hasNamespaceCreatePermission checks if any cluster-scoped permission allows creation of namespaces.
-func hasNamespaceCreatePermission(permissions []clustersv1alpha1.PermissionsRequest) bool {
-	for _, permission := range permissions {
-		if permission.Namespace != "" {
-			continue
-		}
-		for _, rule := range permission.Rules {
-			if !slices.Contains(rule.APIGroups, "") && !slices.Contains(rule.APIGroups, "*") {
-				continue
-			}
-			if !slices.Contains(rule.Resources, "namespaces") && !slices.Contains(rule.Resources, "*") {
-				continue
-			}
-			if slices.Contains(rule.Verbs, "create") || slices.Contains(rule.Verbs, "*") {
-				return true
-			}
-		}
-	}
-	return false
 }
 
 func reconcileRequestedRoleBindings(ctx context.Context, c client.Client, sa *corev1.ServiceAccount, ar *clustersv1alpha1.AccessRequest) ([]client.Object, errutils.ReasonableErrorList) {

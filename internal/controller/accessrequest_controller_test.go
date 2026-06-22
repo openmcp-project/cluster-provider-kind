@@ -115,16 +115,6 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 					Token: &clustersv1alpha1.TokenConfig{
 						Permissions: []clustersv1alpha1.PermissionsRequest{
 							{
-								Name: "allow-namespace-create",
-								Rules: []rbacv1.PolicyRule{
-									{
-										APIGroups: []string{""},
-										Resources: []string{"namespaces"},
-										Verbs:     []string{"create"},
-									},
-								},
-							},
-							{
 								Name:  "test-cluster-role",
 								Rules: exampleRules(),
 							},
@@ -132,6 +122,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 								Name:      "test-role",
 								Namespace: "test",
 								Rules:     exampleRules(),
+							},
+							{
+								Name:                              "another-test-role",
+								Namespace:                         "another-test",
+								Rules:                             exampleRules(),
+								DisableAutomaticNamespaceCreation: true,
 							},
 						},
 						RoleRefs: []common.RoleRef{
@@ -330,19 +326,24 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.Len(t, role.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, role.Rules)
 
-			// assert namespace has been created for namespaced permission reconciliation
-			ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
-			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(ns), ns)
+			// assert namespace has been created for namespaced permission
+			nsCreated := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(nsCreated), nsCreated)
 			assert.NoError(t, err)
+
+			// assert namespace has NOT been created for namespaced permission with disabled namespace creation
+			nsNotCreated := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "another-test"}}
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(nsNotCreated), nsNotCreated)
+			assert.Error(t, err)
 
 			// assert cluster role binding exists
 			crbList := &rbacv1.ClusterRoleBindingList{}
 			err = requestedClusterClient.List(ctx, crbList)
 			assert.NoError(t, err)
 			// expected: one for namespace create permission, one for the new and one for the 'existing' cluster role
-			assert.Len(t, crbList.Items, 3)
+			assert.Len(t, crbList.Items, 2)
 			// assert reference to service account
-			expectedRoleRefs := []string{"allow-namespace-create", "test-cluster-role", "existing-cluster-role"}
+			expectedRoleRefs := []string{"test-cluster-role", "existing-cluster-role"}
 			for _, crb := range crbList.Items {
 				assert.Contains(t, expectedRoleRefs, crb.RoleRef.Name)
 				for _, sub := range crb.Subjects {
@@ -357,9 +358,9 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			err = requestedClusterClient.List(ctx, rbList)
 			assert.NoError(t, err)
 			// expected: one for the new and one for the 'existing' cluster role
-			assert.Len(t, rbList.Items, 2)
+			assert.Len(t, rbList.Items, 3)
 			// assert reference to service account
-			expectedRoleRefs = []string{"test-role", "existing-role"}
+			expectedRoleRefs = []string{"test-role", "existing-role", "another-test-role"}
 			for _, rb := range rbList.Items {
 				assert.Contains(t, expectedRoleRefs, rb.RoleRef.Name)
 				for _, sub := range rb.Subjects {
@@ -480,100 +481,6 @@ func TestAccessRequestReconciler_AnnotateLocalhostURL(t *testing.T) {
 			persisted := &clustersv1alpha1.AccessRequest{}
 			assert.NoError(t, r.Get(ctx, client.ObjectKeyFromObject(ar), persisted))
 			assert.Equal(t, tt.wantAnnot, persisted.Annotations[kindLocalhostAddressAnnotation])
-		})
-	}
-}
-
-func TestHasPermissionToCreateNamespaces(t *testing.T) {
-	tests := []struct {
-		name        string
-		permissions []clustersv1alpha1.PermissionsRequest
-		want        bool
-	}{
-		{
-			name: "returns true for core api group, namespaces, create",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{""},
-						Resources: []string{"namespaces"},
-						Verbs:     []string{"create"},
-					}},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "returns true for wildcard api group, resource and verb",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{"*"},
-						Resources: []string{"*"},
-						Verbs:     []string{"*"},
-					}},
-				},
-			},
-			want: true,
-		},
-		{
-			name: "returns false for namespaced permission even if rule matches",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Namespace: "team-a",
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{""},
-						Resources: []string{"namespaces"},
-						Verbs:     []string{"create"},
-					}},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "returns false when api group is not core",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{"apps"},
-						Resources: []string{"namespaces"},
-						Verbs:     []string{"create"},
-					}},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "returns false when namespaces resource is missing",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{""},
-						Resources: []string{"pods"},
-						Verbs:     []string{"create"},
-					}},
-				},
-			},
-			want: false,
-		},
-		{
-			name: "returns false when create verb is missing",
-			permissions: []clustersv1alpha1.PermissionsRequest{
-				{
-					Rules: []rbacv1.PolicyRule{{
-						APIGroups: []string{""},
-						Resources: []string{"namespaces"},
-						Verbs:     []string{"get"},
-					}},
-				},
-			},
-			want: false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, hasNamespaceCreatePermission(tt.permissions))
 		})
 	}
 }
