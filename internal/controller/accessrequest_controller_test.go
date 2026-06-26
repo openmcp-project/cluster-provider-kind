@@ -340,7 +340,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			crbList := &rbacv1.ClusterRoleBindingList{}
 			err = requestedClusterClient.List(ctx, crbList)
 			assert.NoError(t, err)
-			// expected: one for namespace create permission, one for the new and one for the 'existing' cluster role
+			// expected: one for the new and one for the 'existing' cluster role
 			assert.Len(t, crbList.Items, 2)
 			// assert reference to service account
 			expectedRoleRefs := []string{"test-cluster-role", "existing-cluster-role"}
@@ -357,7 +357,7 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			rbList := &rbacv1.RoleBindingList{}
 			err = requestedClusterClient.List(ctx, rbList)
 			assert.NoError(t, err)
-			// expected: one for the new and one for the 'existing' cluster role
+			// expected: two for the newly created and one for the 'existing' role
 			assert.Len(t, rbList.Items, 3)
 			// assert reference to service account
 			expectedRoleRefs = []string{"test-role", "existing-role", "another-test-role"}
