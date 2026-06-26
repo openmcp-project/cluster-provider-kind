@@ -506,6 +506,14 @@ func reconcileRequestedPermissions(ctx context.Context, c client.Client, sa *cor
 			roleName = fmt.Sprintf("openmcp:permission:%s:%d", ctrlutils.NameHashSHAKE128Base32(Environment(), ProviderName(), ar.Namespace, ar.Name), i)
 		}
 		if permission.Namespace != "" {
+			// ensure namespace for role + binding if not disabled
+			if !permission.DisableAutomaticNamespaceCreation {
+				log.Info("Ensuring Namespace for Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
+				if _, err := clusteraccess.EnsureNamespace(ctx, c, permission.Namespace); err != nil {
+					errlist.Append(errutils.WithReason(fmt.Errorf("error ensuring namespace '%s' for role '%s': %w", permission.Namespace, roleName, err), reasonKindClusterInteractionError))
+					continue
+				}
+			}
 			// ensure role + binding
 			log.Info("Ensuring Role and RoleBinding", "roleName", roleName, "namespace", permission.Namespace)
 			rb, r, err := clusteraccess.EnsureRoleAndBinding(ctx, c, roleName, permission.Namespace, subjects, permission.Rules, expectedLabels...)

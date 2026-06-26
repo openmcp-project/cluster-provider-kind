@@ -123,6 +123,12 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 								Namespace: "test",
 								Rules:     exampleRules(),
 							},
+							{
+								Name:                              "another-test-role",
+								Namespace:                         "another-test",
+								Rules:                             exampleRules(),
+								DisableAutomaticNamespaceCreation: true,
+							},
 						},
 						RoleRefs: []common.RoleRef{
 							{
@@ -320,6 +326,16 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			assert.Len(t, role.Rules, len(expectedRules))
 			assert.ElementsMatch(t, expectedRules, role.Rules)
 
+			// assert namespace has been created for namespaced permission
+			nsCreated := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "test"}}
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(nsCreated), nsCreated)
+			assert.NoError(t, err)
+
+			// assert namespace has NOT been created for namespaced permission with disabled namespace creation
+			nsNotCreated := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "another-test"}}
+			err = requestedClusterClient.Get(ctx, client.ObjectKeyFromObject(nsNotCreated), nsNotCreated)
+			assert.Error(t, err)
+
 			// assert cluster role binding exists
 			crbList := &rbacv1.ClusterRoleBindingList{}
 			err = requestedClusterClient.List(ctx, crbList)
@@ -341,10 +357,10 @@ func TestAccessRequestReconciler_Reconcile(t *testing.T) {
 			rbList := &rbacv1.RoleBindingList{}
 			err = requestedClusterClient.List(ctx, rbList)
 			assert.NoError(t, err)
-			// expected: one for the new and one for the 'existing' cluster role
-			assert.Len(t, rbList.Items, 2)
+			// expected: two for the newly created and one for the 'existing' role
+			assert.Len(t, rbList.Items, 3)
 			// assert reference to service account
-			expectedRoleRefs = []string{"test-role", "existing-role"}
+			expectedRoleRefs = []string{"test-role", "existing-role", "another-test-role"}
 			for _, rb := range rbList.Items {
 				assert.Contains(t, expectedRoleRefs, rb.RoleRef.Name)
 				for _, sub := range rb.Subjects {
