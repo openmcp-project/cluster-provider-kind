@@ -15,24 +15,24 @@ OPENMCP_ENVIRONMENT=${OPENMCP_ENVIRONMENT:-debug}
 # Cluster Provider Kind
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/cluster-provider-kind
-OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.4.1}
+OPENMCP_CP_KIND_RELEASE_VERSION=${OPENMCP_CP_KIND_RELEASE_VERSION:-v0.5.0}
 OPENMCP_CP_KIND_IMAGE=${OPENMCP_CP_KIND_IMAGE:-ghcr.io/openmcp-project/images/cluster-provider-kind:${OPENMCP_CP_KIND_RELEASE_VERSION}}
 
 # ============================================================================
 # Service Providers
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-crossplane
-SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v1.0.1}
+SERVICE_PROVIDER_CROSSPLANE_VERSION=${SERVICE_PROVIDER_CROSSPLANE_VERSION:-v1.0.2}
 SERVICE_PROVIDER_CROSSPLANE_IMAGE=${SERVICE_PROVIDER_CROSSPLANE_IMAGE:-ghcr.io/openmcp-project/images/service-provider-crossplane:${SERVICE_PROVIDER_CROSSPLANE_VERSION}}
 # renovate: datasource=github-releases depName=openmcp-project/service-provider-landscaper
-SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v1.1.0}
+SERVICE_PROVIDER_LANDSCAPER_VERSION=${SERVICE_PROVIDER_LANDSCAPER_VERSION:-v1.1.1}
 SERVICE_PROVIDER_LANDSCAPER_IMAGE=${SERVICE_PROVIDER_LANDSCAPER_IMAGE:-ghcr.io/openmcp-project/images/service-provider-landscaper:${SERVICE_PROVIDER_LANDSCAPER_VERSION}}
 
 # ============================================================================
 # Platform Service Gateway
 # ============================================================================
 # renovate: datasource=github-releases depName=openmcp-project/platform-service-gateway
-PLATFORM_SERVICE_GATEWAY_VERSION=${PLATFORM_SERVICE_GATEWAY_VERSION:-v0.0.10}
+PLATFORM_SERVICE_GATEWAY_VERSION=${PLATFORM_SERVICE_GATEWAY_VERSION:-v0.0.14}
 PLATFORM_SERVICE_GATEWAY_IMAGE=${PLATFORM_SERVICE_GATEWAY_IMAGE:-ghcr.io/openmcp-project/images/platform-service-gateway:${PLATFORM_SERVICE_GATEWAY_VERSION}}
 
 ENVOY_PROXY_IMAGE=${ENVOY_PROXY_IMAGE:-ghcr.io/openmcp-project/components/github.com/openmcp-project/openmcp/images/envoy-proxy:distroless-v1.36.2}
