@@ -6,14 +6,14 @@ godebug default=go1.23
 
 require (
 	github.com/openmcp-project/controller-utils v0.30.0
-	github.com/openmcp-project/openmcp-operator/api v1.1.0
-	github.com/openmcp-project/openmcp-operator/lib v1.1.0
+	github.com/openmcp-project/openmcp-operator/api v1.2.0
+	github.com/openmcp-project/openmcp-operator/lib v1.2.0
 	github.com/stretchr/testify v1.11.1
 	k8s.io/api v0.36.2
 	k8s.io/apiextensions-apiserver v0.36.2
 	k8s.io/apimachinery v0.36.2
 	k8s.io/client-go v0.36.2
-	k8s.io/utils v0.0.0-20260626114624-be93311217bd
+	k8s.io/utils v0.0.0-20260707023825-cf1189d6abe3
 	sigs.k8s.io/controller-runtime v0.24.1
 	sigs.k8s.io/kind v0.32.0
 	sigs.k8s.io/kustomize/api v0.21.1
