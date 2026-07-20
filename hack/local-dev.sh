@@ -390,12 +390,12 @@ setup_provider_configs() {
   if [[ "$DEPLOY_SP_LANDSCAPER" == "true" ]]; then
     log_info "Installing Landscaper provider configuration"
     kubectl apply -f - << EOF
-apiVersion: landscaper.services.openmcp.cloud/v1alpha2
+apiVersion: landscaper.services.open-control-plane.io/v1alpha2
 kind: ProviderConfig
 metadata:
   name: default
   labels:
-    landscaper.services.openmcp.cloud/providertype: default
+    landscaper.services.open-control-plane.io/providertype: default
 spec:
   deployment:
     repository: ${LANDSCAPER_REPOSITORY}
@@ -438,7 +438,7 @@ EOF
   if [[ "$DEPLOY_SP_CROSSPLANE" == "true" ]]; then
     log_info "Installing Crossplane provider configuration"
     kubectl apply -f - << EOF
-apiVersion: crossplane.services.openmcp.cloud/v1alpha1
+apiVersion: crossplane.services.open-control-plane.io/v1alpha1
 kind: ProviderConfig
 metadata:
   name: default
