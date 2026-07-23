@@ -395,7 +395,7 @@ kind: ProviderConfig
 metadata:
   name: default
   labels:
-    landscaper.services.open-control-plane.io/providertype: default
+    landscaper.services.openmcp.cloud/providertype: default
 spec:
   deployment:
     repository: ${LANDSCAPER_REPOSITORY}
