@@ -22,7 +22,6 @@
       ],
       "groupName": "All openMCP Project Updates",
       "groupSlug": "all-openmcp-updates",
-          "rebaseWhen": "auto",
       "automerge": true,
       "automergeType": "pr-comment",
       "automergeComment": "automerge all openMCP project dependencies updates"
