@@ -192,6 +192,11 @@ data:
             spec:
               profile: kind
               tenancy: Shared
+        workload-odg:
+          template:
+            spec:
+              profile: kind
+              tenancy: Exclusive
 EOF
 }
 
