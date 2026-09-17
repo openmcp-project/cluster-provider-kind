@@ -217,11 +217,20 @@ See the [ocpctl documentation](https://github.com/openmcp-project/ocpctl/blob/ma
 
 #### Using Locally Built Images
 
-To test local changes, build the image first and then pass a config file to `ocpctl` that overrides the cluster provider image:
+The build task appends a `-linux-<arch>` suffix to the version. Using `VERSION_OVERRIDE=local` produces a predictable tag:
 
 ```bash
-task build:img:build
+VERSION_OVERRIDE=local task build:img:build
+# produces: ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64
 ```
+
+ocpctl creates a kind cluster named `<name>-platform`. Load the image into it before deploying:
+
+```bash
+kind load docker-image ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64 --name <name>-platform
+```
+
+Then reference the image in a config file and apply:
 
 ```yaml
 # env.yaml
@@ -230,7 +239,7 @@ kind: Environment
 spec:
   clusterProviders:
     - name: kind
-      image: ghcr.io/openmcp-project/images/cluster-provider-kind:local
+      image: ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64
 ```
 
 ```bash
