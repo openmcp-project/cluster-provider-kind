@@ -178,10 +178,10 @@ spec:
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|----------|-------------|
-| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No | "accessrequests" | Namespace where `AccessRequest` service accounts are created |
-| `KIND_CONFIG_FILE` | No | "" | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
+| Variable                                   | Required | Default          | Description                                                                          |
+| ------------------------------------------ | -------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No       | "accessrequests" | Namespace where `AccessRequest` service accounts are created                         |
+| `KIND_CONFIG_FILE`                         | No       | ""               | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
 
 ## 📖 Usage
 
@@ -217,7 +217,7 @@ See the [ocpctl documentation](https://github.com/openmcp-project/ocpctl/blob/ma
 
 #### Using Locally Built Images
 
-The build task appends a `-linux-<arch>` suffix to the version. Using `VERSION_OVERRIDE=local` produces a predictable tag:
+To test local changes, build the image first and then pass a config file to `ocpctl` that overrides the cluster provider image. The build task appends a `-linux-<arch>` suffix to the version. Using `VERSION_OVERRIDE=local` produces a predictable tag:
 
 ```bash
 VERSION_OVERRIDE=local task build:img:build
