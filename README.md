@@ -178,10 +178,10 @@ spec:
 
 ## Environment Variables
 
-| Variable | Required | Default | Description |
-|----------|----------|----------|-------------|
-| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No | "accessrequests" | Namespace where `AccessRequest` service accounts are created |
-| `KIND_CONFIG_FILE` | No | "" | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
+| Variable                                   | Required | Default          | Description                                                                          |
+| ------------------------------------------ | -------- | ---------------- | ------------------------------------------------------------------------------------ |
+| `ACCESS_REQUEST_SERVICE_ACCOUNT_NAMESPACE` | No       | "accessrequests" | Namespace where `AccessRequest` service accounts are created                         |
+| `KIND_CONFIG_FILE`                         | No       | ""               | Configure kind [cluster creation](https://kind.sigs.k8s.io/docs/user/configuration/) |
 
 ## 📖 Usage
 
@@ -205,89 +205,46 @@ kubectl apply -f clusterrequest.yaml
 
 ## 🧑‍💻 Development
 
-### Quick Setup with Local Development Script
+### Quick Setup with ocpctl
 
-To quickly set up a complete OpenMCP local development environment, use the provided setup script:
-
-```bash
-./hack/local-dev.sh deploy
-```
-
-This script automatically:
-- Creates a KinD cluster with Docker socket access
-- Pulls and loads required Docker images
-- Deploys the OpenMCP operator
-- Installs the cluster provider for kind
-- Deploys service providers (Crossplane, Landscaper, Gateway)
-- Installs Flux2
-- Waits for all components to be ready
-
-You can control which service providers are deployed using environment variables:
+To quickly set up a complete OpenMCP local development environment, use [ocpctl](https://github.com/openmcp-project/ocpctl):
 
 ```bash
-DEPLOY_SP_CROSSPLANE=false DEPLOY_SP_LANDSCAPER=true ./hack/local-dev.sh deploy
+ocpctl env apply <name>
 ```
 
-Available deployment control variables (all default to `true`):
-- `DEPLOY_SP_CROSSPLANE` - Deploy Crossplane service provider
-- `DEPLOY_SP_LANDSCAPER` - Deploy Landscaper service provider  
-- `DEPLOY_SP_GATEWAY` - Deploy Gateway platform service
-
-In case [kind fails to load container images from the local docker store](https://github.com/kubernetes-sigs/kind/issues/3795), configure docker's `/etc/docker/daemon.json` as follows:
-```json
-{
-  "features": {
-    "containerd-snapshotter": false
-  }
-}
-```
-
-#### Accessing the Platform Cluster
-
-To obtain a kubeconfig for the platform cluster, the script creates an `AccessRequest` and waits for it to be granted. The resulting kubeconfig is written to a temporary file:
-
-```bash
-./hack/local-dev.sh access-platform-cluster
-```
-
-Alternatively, you can switch your current kubectl context directly to the platform cluster:
-
-```bash
-./hack/local-dev.sh access-platform-cluster --force
-```
-
-This remembers your previous context and prints a command to switch back.
-
-#### Resetting the Environment
-
-To reset your environment and delete all KinD clusters:
-
-```bash
-./hack/local-dev.sh reset         # Prompts for confirmation
-./hack/local-dev.sh reset --force # Skip confirmation
-```
-For more options:
-
-```bash
-./hack/local-dev.sh help
-```
+See the [ocpctl documentation](https://github.com/openmcp-project/ocpctl/blob/main/README.md) for all available commands and configuration options.
 
 #### Using Locally Built Images
 
-To test your local changes, you can build the images locally and then use them in the deployment script by overriding the image variables:
+To test local changes, build the image first and then pass a config file to `ocpctl` that overrides the cluster provider image. The build task appends a `-linux-<arch>` suffix to the version. Using `VERSION_OVERRIDE=local` produces a predictable tag:
 
 ```bash
-# Build your local image
-task build:img:build
-
-# Deploy using your local image
-OPENMCP_CP_KIND_IMAGE=ghcr.io/openmcp-project/images/cluster-provider-kind:local ./hack/local-dev.sh deploy
+VERSION_OVERRIDE=local task build:img:build
+# produces: ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64
 ```
 
-Available image override variables:
-- `OPENMCP_OPERATOR_IMAGE` - Override the OpenMCP operator image
-- `OPENMCP_CP_KIND_IMAGE` - Override the cluster provider kind image
+ocpctl creates a kind cluster named `<name>-platform`. Load the image into it before deploying:
 
+```bash
+kind load docker-image ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64 --name <name>-platform
+```
+
+Then reference the image in a config file and apply:
+
+```yaml
+# env.yaml
+apiVersion: ocpctl.open-control-plane.io/v1alpha1
+kind: Environment
+spec:
+  clusterProviders:
+    - name: kind
+      image: ghcr.io/openmcp-project/images/cluster-provider-kind:local-linux-amd64
+```
+
+```bash
+ocpctl env apply <name> --config env.yaml
+```
 
 ### Building and Testing
 
