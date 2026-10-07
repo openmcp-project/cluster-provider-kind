@@ -14,3 +14,4 @@ includes:
       DOCKERFILE: '{{.ROOT_DIR}}/Dockerfile'
       CRDS_COMPONENTS: 'cluster-provider-kind'
       CRDS_PATH: '{{.ROOT_DIR}}/api/crds/manifests'
+      FIPS: 'false'
